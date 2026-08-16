@@ -1,100 +1,385 @@
-# PIREP Turbulence Classifier — Phase 0 & 1
+# Turbulence From Text
 
-Data collection infrastructure for the turbulence-from-text project.
+PIREP severity classifier, geospatial map, and weather-fusion research project.
+
+This repository is the starting point for a larger aviation ML pipeline: collect
+pilot reports, learn to classify turbulence severity from their text, plot the
+reports in space and altitude, then fuse in weather data to study which
+atmospheric conditions are associated with rough air.
+
+The current code covers **Phase 0** and **Phase 1**: schema discovery and data
+collection from the NOAA/NWS Aviation Weather Center aircraft reports cache.
+
+## Project Idea
+
+Pilots report turbulence through short, jargon-heavy PIREPs such as:
+
+```text
+UA /OV SFO /TM 1425 /FL350 /TP B738 /TB MOD CHOP occasional sharp jolts
+```
+
+Those reports contain two useful things at once:
+
+- **Free text** that describes the flight conditions.
+- **Structured turbulence fields** such as `/TB LGT`, `/TB MOD`, or `/TB SEV`.
+
+That makes the project tractable. The structured turbulence field can provide a
+label, while the remaining report text becomes the model input. The important
+catch is label leakage: the `/TB` field must be removed before training, or the
+model simply learns to read the answer.
+
+## What We Are Building
+
+### 1. Classify
+
+Train an NLP model that maps cleaned PIREP text to a turbulence class:
+
+- `None`
+- `Light`
+- `Moderate`
+- `Severe`
+
+The first model should be a strong baseline: TF-IDF plus Logistic Regression or
+Linear SVM. A later version can fine-tune a small transformer such as
+DistilBERT, especially because aviation text is terse and domain-specific.
+
+### 2. Map
+
+Plot reports and model predictions on an interactive geospatial map. Reports
+should be filterable by severity, altitude or flight level, aircraft type, and
+time.
+
+The map is not just presentation. It is also a debugging tool. If reports cluster
+in impossible locations, the `/OV` parsing or geocoding logic is probably wrong.
+
+### 3. Explain
+
+Fuse each PIREP with nearby weather observations and derived features:
+
+- nearest METAR in space and time
+- wind speed and direction
+- pressure and temperature signals
+- convective indicators
+- possible upper-air or gridded wind/temperature products later
+
+This is the most original part of the project. The question becomes: which
+weather signatures most strongly co-occur with, or precede, moderate-to-severe
+turbulence?
+
+## Why This Project Is Interesting
+
+This is not another generic sentiment classifier. It uses real operational
+aviation data, deals with noisy domain language, has a geospatial component, and
+connects naturally to aerospace and flight-safety work.
+
+The end-to-end pipeline looks like real applied ML:
+
+```text
+collect -> parse -> label -> model -> map -> fuse weather -> explain
+```
+
+## Data Source
+
+Primary source:
+
+- NOAA/NWS Aviation Weather Center public data
+- API/cache host: `https://aviationweather.gov`
+- No API key required
+- Custom `User-Agent` recommended
+
+This repo currently uses the aircraft reports cache:
+
+```text
+https://aviationweather.gov/data/cache/aircraftreports.cache.csv.gz
+```
+
+Important constraint: AWC only serves a recent rolling window of aircraft
+reports. The dataset must therefore accrue over time. Start the collector early;
+it is the bottleneck for the whole project.
+
+## Repository Status
+
+Implemented now:
+Z
+- `explore.py` discovers the real AWC cache schema.
+- `collector.py` polls the cache, deduplicates reports, and stores them in
+  SQLite.
+- `test_collector.py` validates collector behavior against synthetic data.
+
+Not implemented yet:
+
+- PIREP parser and label mapper.
+- Leakage-safe text cleaner.
+- Training dataset builder.
+- Baseline classifier.
+- Transformer classifier.
+- Geospatial map.
+- METAR/weather fusion layer.
+- Analysis/reporting notebooks or app.
 
 ## Setup
 
+Create a virtual environment and install the current dependencies:
+
 ```bash
-python -m venv venv && source venv/bin/activate
+python -m venv venv
+venv\Scripts\activate
 pip install pandas requests
 ```
 
-Set your identifier in **both** files (AWC asks for a custom User-Agent or
-automated traffic may get filtered):
+On macOS/Linux:
 
-```python
-USER_AGENT = "pirep-turbulence-<yourname>"
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install pandas requests
 ```
 
-## Step 1 — Phase 0: discover the schema
+Set a custom identifier in both `explore.py` and `collector.py`:
+
+```python
+USER_AGENT = "pirep-turbulence-yourname"
+```
+
+AWC recommends identifiable automated traffic. Anonymous or generic clients may
+be filtered.
+
+## Phase 0: Understand The Data
+
+Goal: inspect the live schema and read real reports before writing ML code.
+
+Run:
 
 ```bash
 python explore.py
 ```
 
-Prints the real column names, PIREP-vs-AIREP breakdown, turbulence label
-yield, and sample reports. Saves `snapshot.csv` so you can build the parser
-offline afterwards.
+This script:
 
-**Read the sample reports.** This is the step people skip and then lose three
-days debugging a parser against assumptions they never checked.
+- downloads the current aircraft reports cache
+- prints all column names and non-null counts
+- resolves likely fields such as raw text, turbulence, report type, altitude,
+  aircraft type, latitude, longitude, and observation time
+- shows PIREP/AIREP distribution
+- estimates turbulence label yield
+- prints sample reports
+- saves `snapshot.csv`
 
-Then copy the resolved column names into `COLUMNS` in `collector.py`.
-Auto-resolution works if AWC uses a name in the candidate list, but pinning
-them explicitly means a schema change fails loudly instead of silently.
+After running it, copy the resolved column names into `COLUMNS` in
+`collector.py`. Auto-resolution exists, but explicit columns make schema changes
+fail loudly instead of quietly corrupting your dataset.
 
-## Step 2 — Phase 1: start collecting
+The most important activity in this phase is reading sample reports. The format
+is compact, inconsistent, and full of aviation abbreviations. Assumptions made
+without looking at the raw data will usually become parser bugs later.
+
+## Phase 1: Collect Reports
+
+Goal: start accruing a local historical dataset.
+
+Run one pull first:
 
 ```bash
-python collector.py --once     # verify one pull works
-python collector.py            # continuous, every 10 min
-python collector.py --stats    # check progress anytime
+python collector.py --once
 ```
 
-Start this today. AWC only serves the previous 15 days, so the dataset accrues
-in real time — it is the bottleneck for the whole project.
+Then run the continuous collector:
 
-Run it somewhere that stays up. A sleeping laptop means gaps in the record.
+```bash
+python collector.py
+```
 
-### Getting reports/day
+Check progress at any time:
 
-Run `--stats` 24h apart and diff the totals. That number decides whether Phase 5
-fits your schedule.
+```bash
+python collector.py --stats
+```
 
-## Design decisions worth knowing
+The collector stores data in `pireps.db`. Each row is stored twice:
 
-**Dedup key is a hash of (obs_time + lat + lon + raw_text).** `pirepId` was
-removed from AWC output in Sept 2025 so it cannot be used. The cache is a
-rolling snapshot — every poll re-serves reports you already have. Without
-dedup you build a duplicate-laden dataset that leaks across your train/test
-split and inflates your metrics.
+- extracted typed columns for easy querying
+- full `raw_json` so bad extraction choices can be fixed later without
+  recollecting weeks of data
 
-**Every row is stored twice:** extracted into typed columns, and whole as
-`raw_json`. If a column guess turns out wrong you re-parse from the database
-instead of re-collecting for another three weeks.
+Deduplication uses a hash of:
 
-**204 is not an error.** It means a valid request with no new data. 429 means
-rate-limited; the collector backs off exponentially. AWC caps at 100 req/min
-and asks for no more than 1 req/min per thread.
+```text
+obs_time + lat + lon + raw_text
+```
+
+This matters because the AWC cache is a rolling snapshot. Repeated polls will
+serve many of the same reports again. Without deduplication, duplicates will
+leak across train/test splits and inflate model metrics.
+
+### Collection Reality Check
+
+Run `--stats` about 24 hours apart and compare totals. That gives the real
+reports-per-day accrual rate. Severe turbulence is rare, so class imbalance will
+be one of the central modeling problems.
+
+Run the collector somewhere stable. A sleeping laptop means gaps in the record.
+
+## Phase 2: Parse And Label
+
+Goal: turn raw reports into a clean labeled dataset.
+
+Expected output:
+
+```text
+raw_text_clean, severity_label, lat, lon, flight_level, aircraft_type, obs_time
+```
+
+Key tasks:
+
+- Parse or verify `/TB`, `/OV`, `/FL`, `/TP`, and `/TM`.
+- Map turbulence values into the four-class scheme.
+- Handle combinations such as `LGT-MOD` by taking the maximum severity.
+- Handle negatives such as `NEG` or missing turbulence.
+- Decide whether to exclude AIREPs, which often lack useful prose.
+- Strip `/TB ...` from the model input to prevent label leakage.
+
+Suggested label mapping:
+
+| Raw turbulence signal | Label |
+| --- | --- |
+| `NEG`, missing, none observed | `None` |
+| `LGT`, `LGT CHOP` | `Light` |
+| `MOD`, `LGT-MOD`, `OCNL MOD` | `Moderate` |
+| `SEV`, `MOD-SEV`, `EXTRM` | `Severe` |
+
+The exact mapping should be documented once real values from `snapshot.csv` and
+`pireps.db` are inspected.
+
+## Phase 3: Train The Classifier
+
+Goal: predict severity from cleaned report text, with optional structured
+features.
+
+### Baseline First
+
+Build this before any neural model:
+
+- TF-IDF features from cleaned text
+- Logistic Regression or Linear SVM
+- stratified train/test split
+- class weights or training-only resampling
+- per-class precision, recall, and F1
+
+Do not optimize for accuracy alone. With imbalanced classes, a model can look
+good by mostly predicting the majority class.
+
+### Upgrade
+
+After the baseline:
+
+- fine-tune DistilBERT or another small transformer
+- compare directly against the baseline
+- optionally fuse structured features such as flight level and aircraft type
+
+If the transformer does not beat the baseline, that is still a valid result.
+Small, noisy datasets often reward simpler models.
+
+## Phase 4: Build The Map
+
+Goal: make the reports and predictions visible.
+
+Candidate tools:
+
+- `folium` for a quick interactive map
+- `geopandas` and `contextily` for static/publication-style maps
+- a small web app later if the project grows
+
+Useful map controls:
+
+- severity color
+- time range
+- altitude or flight-level band
+- aircraft type
+- actual label vs predicted label
+- confidence or probability
+
+## Phase 5: Weather Fusion
+
+Goal: connect reported turbulence to atmospheric conditions.
+
+Start simple:
+
+- For each PIREP, find the nearest METAR station in space and time.
+- Extract basic weather features.
+- Validate several matches manually.
+- Compare turbulence severity against weather features.
+
+Then improve:
+
+- add AIRMET/SIGMET turbulence products
+- explore gridded wind and temperature aloft data
+- derive wind shear or instability features
+- test whether weather features improve the classifier
+
+METAR is surface-level, so it may be weak for en-route turbulence at FL300+.
+That limitation should be documented instead of hidden.
+
+## Suggested Order Of Attack
+
+1. Run `explore.py` and inspect the schema.
+2. Start `collector.py` as early as possible.
+3. Build the parser and label mapper on `snapshot.csv`.
+4. Create a leakage-safe training dataframe from `pireps.db`.
+5. Train the TF-IDF baseline.
+6. Add the map.
+7. Try the transformer only after the baseline is working.
+8. Add weather fusion once enough reports have accumulated.
+
+Expected calendar time: 4-6 weeks, mostly gated by data collection.
+
+Expected active work: about 3 weeks for a junior developer with guidance.
 
 ## Backups
+
+Back up the SQLite database regularly:
 
 ```bash
 sqlite3 pireps.db ".backup 'pireps_backup.db'"
 ```
 
-Weeks of accrued data with no backup is the worst way to lose this project.
+Losing weeks of collected data is the easiest way to slow the project down.
 
 ## Tests
+
+Run:
 
 ```bash
 python test_collector.py
 ```
 
-Validates column resolution, dedup on repeat and partial-overlap pulls, field
-extraction, `raw_json` completeness, and missing-column handling — all against
-synthetic data, no network needed.
+The tests use synthetic data and do not need network access. They validate:
 
-## Next: Phase 2
+- column resolution
+- repeat-pull deduplication
+- partial-overlap deduplication
+- field extraction
+- `raw_json` completeness
+- sparse/missing-column handling
 
-Once a few days of data are in, build the parser and label mapper against
-`snapshot.csv`. Two decisions waiting for you:
+## Open Questions
 
-1. **Label scheme.** Collapse to 4 classes (None/Light/Moderate/Severe),
-   taking max severity from combos like `LGT-MOD`.
-2. **AIREP filtering.** Automated reports carry no prose. Check the
-   `report_type` distribution and decide whether to exclude them — training a
-   language model on empty strings will quietly destroy your results.
+- What exact turbulence values appear in the live data?
+- Should AIREPs be excluded entirely or kept for non-text analysis?
+- How many labeled PIREPs arrive per day?
+- How rare are `Severe` and `Moderate-Severe` reports?
+- Is `/OV` already decoded to lat/lon reliably enough, or do we need navaid
+  lookup support?
+- Should the final deliverable be a notebook, a map app, a paper-style report,
+  or all three?
 
-**Label leakage warning:** strip the `/TB` field from `raw_text` before it
-reaches the model. Otherwise it learns to read the answer, not the language.
+## Mentoring Notes
+
+For a junior developer, the highest-value habits in this project are:
+
+- inspect real data before designing abstractions
+- build the simple baseline first
+- prevent label leakage deliberately
+- measure per-class metrics, not just accuracy
+- keep raw data so mistakes can be reprocessed
+- validate geospatial and weather matches by hand before trusting automation
+
