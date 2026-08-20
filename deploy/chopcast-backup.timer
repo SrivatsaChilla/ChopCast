@@ -1,0 +1,12 @@
+[Unit]
+Description=Nightly ChopCast DB backup
+
+[Timer]
+OnCalendar=daily
+# Survives downtime: if the box was off at 00:00, run on next boot instead of
+# silently skipping the backup.
+Persistent=true
+RandomizedDelaySec=900
+
+[Install]
+WantedBy=timers.target

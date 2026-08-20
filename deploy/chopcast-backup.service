@@ -1,0 +1,10 @@
+[Unit]
+Description=Back up the ChopCast SQLite DB to S3
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ec2-user
+WorkingDirectory=/home/ec2-user/ChopCast
+ExecStart=/home/ec2-user/ChopCast/deploy/backup.sh

@@ -3,8 +3,12 @@
 Phase 1: PIREP collection pipeline.
 
 Polls the AWC aircraft-reports cache, deduplicates, and accumulates into
-SQLite. The AWC database only serves the previous 15 days, so this must run
-continuously for weeks to build a training set.
+SQLite.
+
+The cache is a rolling ~90-MINUTE window (measured live 2026-08-20:
+observation_time spanned 00:08-01:37Z), not 15 days. There is no backfill
+endpoint, so any downtime is permanent data loss. Run this on an always-on
+host -- see deploy/RUNBOOK.md.
 
 Design notes:
   - Stores the FULL raw row as JSON alongside extracted fields. If a column
@@ -19,12 +23,16 @@ Run:
     python collector.py --stats       # summarize what you have so far
 """
 
+from __future__ import annotations
+
 import argparse
 import gzip
 import hashlib
 import io
 import json
 import logging
+import logging.handlers
+import os
 import signal
 import sqlite3
 import sys
@@ -39,7 +47,10 @@ import requests
 # CONFIG -- update COLUMNS after running explore.py
 # --------------------------------------------------------------------------
 CSV_URL = "https://aviationweather.gov/data/cache/aircraftreports.cache.csv.gz"
-USER_AGENT = "pirep-turbulence-research"  # <- your identifier
+USER_AGENT = os.environ.get(
+    "CHOPCAST_UA",
+    "chopcast-pirep-research (+https://github.com/SrivatsaChilla/ChopCast)",
+)
 DB_PATH = Path("pireps.db")
 POLL_SECONDS = 600          # 10 min. Cache refreshes every 60s; be polite.
 REQUEST_TIMEOUT = 60
@@ -47,31 +58,44 @@ MAX_RETRIES = 5
 
 # Fill these in from explore.py output. None = auto-resolve from candidates.
 COLUMNS = {
-    "raw_text": None,
-    "turbulence": None,
-    "report_type": None,
-    "aircraft": None,
-    "lat": None,
-    "lon": None,
-    "altitude": None,
-    "obs_time": None,
+    "raw_text": "raw_text",
+    "turbulence": "turbulence_intensity",
+    "turbulence_2": "turbulence_intensity.1",   # CSV has repeating layer groups
+    "turbulence_type": "turbulence_type",
+    "turbulence_freq": "turbulence_freq",
+    "report_type": "report_type",
+    "aircraft": "aircraft_ref",
+    "lat": "latitude",
+    "lon": "longitude",
+    "altitude": "altitude_ft_msl",
+    "obs_time": "observation_time",
 }
 
+# Fallbacks only. Real AWC columns are snake_case; camelCase variants are kept
+# for the legacy/XML feed. Auto-resolution is a safety net, not the plan.
 CANDIDATES = {
-    "raw_text": ["rawOb", "raw_text", "raw", "report", "rawReport"],
-    "turbulence": ["turbulence", "tbInt1", "turbInt", "tb", "turbulenceIntensity"],
-    "report_type": ["reportType", "obsType", "type", "acReportType"],
-    "aircraft": ["acType", "aircraftType", "actype", "aircraft_ref"],
-    "lat": ["lat", "latitude"],
-    "lon": ["lon", "longitude"],
-    "altitude": ["altFt", "fltLvl", "altitude_ft_msl", "flightLevel", "alt"],
-    "obs_time": ["obsTime", "observation_time", "receiptTime", "time"],
+    "raw_text": ["raw_text", "rawOb", "raw", "report", "rawReport"],
+    "turbulence": ["turbulence_intensity", "turbulenceIntensity", "tbInt1", "turbulence"],
+    "turbulence_2": ["turbulence_intensity.1"],
+    "turbulence_type": ["turbulence_type", "turbulenceType"],
+    "turbulence_freq": ["turbulence_freq", "turbulenceFreq"],
+    "report_type": ["report_type", "reportType", "obsType", "acReportType"],
+    "aircraft": ["aircraft_ref", "acType", "aircraftType"],
+    "lat": ["latitude", "lat"],
+    "lon": ["longitude", "lon"],
+    "altitude": ["altitude_ft_msl", "altFt", "flightLevel", "fltLvl"],
+    "obs_time": ["observation_time", "obsTime", "receiptTime", "time"],
 }
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-7s %(message)s",
-    handlers=[logging.FileHandler("collector.log"), logging.StreamHandler(sys.stdout)],
+    handlers=[
+        logging.handlers.RotatingFileHandler(
+            "collector.log", maxBytes=5_000_000, backupCount=3
+        ),
+        logging.StreamHandler(sys.stdout),
+    ],
 )
 log = logging.getLogger("collector")
 
@@ -95,6 +119,9 @@ CREATE TABLE IF NOT EXISTS reports (
     report_type TEXT,
     raw_text    TEXT,
     turbulence  TEXT,
+    turbulence_2    TEXT,
+    turbulence_type TEXT,
+    turbulence_freq TEXT,
     aircraft    TEXT,
     lat         REAL,
     lon         REAL,
@@ -153,8 +180,21 @@ def row_hash(row: pd.Series, cols: dict) -> str:
     for key in ("obs_time", "lat", "lon", "raw_text"):
         col = cols.get(key)
         val = row.get(col) if col else None
-        parts.append("" if pd.isna(val) else str(val).strip())
+        if val is None or pd.isna(val):
+            parts.append("")
+        elif key in ("lat", "lon"):
+            # A missing value elsewhere in the pull flips this column
+            # int64 -> float64, making "37" and "37.0" hash differently.
+            parts.append(f"{float(val):.4f}")
+        else:
+            parts.append(str(val).strip())
     return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
+
+
+def _text(val):
+    """None stays None. str(None) would store the literal string 'None'."""
+    val = _clean(val)
+    return None if val is None else str(val)
 
 
 def _clean(val):
@@ -218,8 +258,7 @@ def fetch(url: str) -> pd.DataFrame | None:
             time.sleep(delay)
             delay = min(delay * 2, 300)
 
-    log.error("Giving up after %d attempts.", MAX_RETRIES)
-    return None
+    raise RuntimeError(f"fetch failed after {MAX_RETRIES} attempts")
 
 
 def store(conn: sqlite3.Connection, df: pd.DataFrame) -> tuple[int, int]:
@@ -231,11 +270,14 @@ def store(conn: sqlite3.Connection, df: pd.DataFrame) -> tuple[int, int]:
         rows.append((
             row_hash(row, cols),
             now,
-            str(_clean(row.get(cols["obs_time"]))) if cols["obs_time"] else None,
-            str(_clean(row.get(cols["report_type"]))) if cols["report_type"] else None,
-            str(_clean(row.get(cols["raw_text"]))) if cols["raw_text"] else None,
-            str(_clean(row.get(cols["turbulence"]))) if cols["turbulence"] else None,
-            str(_clean(row.get(cols["aircraft"]))) if cols["aircraft"] else None,
+            _text(row.get(cols["obs_time"])) if cols["obs_time"] else None,
+            _text(row.get(cols["report_type"])) if cols["report_type"] else None,
+            _text(row.get(cols["raw_text"])) if cols["raw_text"] else None,
+            _text(row.get(cols["turbulence"])) if cols["turbulence"] else None,
+            _text(row.get(cols["turbulence_2"])) if cols.get("turbulence_2") else None,
+            _text(row.get(cols["turbulence_type"])) if cols.get("turbulence_type") else None,
+            _text(row.get(cols["turbulence_freq"])) if cols.get("turbulence_freq") else None,
+            _text(row.get(cols["aircraft"])) if cols["aircraft"] else None,
             _num(row.get(cols["lat"])) if cols["lat"] else None,
             _num(row.get(cols["lon"])) if cols["lon"] else None,
             _num(row.get(cols["altitude"])) if cols["altitude"] else None,
@@ -246,8 +288,9 @@ def store(conn: sqlite3.Connection, df: pd.DataFrame) -> tuple[int, int]:
     conn.executemany(
         "INSERT OR IGNORE INTO reports "
         "(hash, fetched_at, obs_time, report_type, raw_text, turbulence, "
+        " turbulence_2, turbulence_type, turbulence_freq, "
         " aircraft, lat, lon, altitude, raw_json) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         rows,
     )
     conn.commit()
@@ -258,8 +301,15 @@ def store(conn: sqlite3.Connection, df: pd.DataFrame) -> tuple[int, int]:
 
 
 def run_once(conn: sqlite3.Connection) -> None:
-    df = fetch(CSV_URL)
     ran_at = datetime.now(timezone.utc).isoformat()
+    try:
+        df = fetch(CSV_URL)
+    except RuntimeError as e:
+        log.error("FETCH FAILED -- this is data loss, not a quiet day: %s", e)
+        conn.execute("INSERT INTO runs (ran_at, rows_seen, inserted, skipped, status) "
+                     "VALUES (?,?,?,?,?)", (ran_at, 0, 0, 0, "failed"))
+        conn.commit()
+        return
 
     if df is None:
         conn.execute("INSERT INTO runs (ran_at, rows_seen, inserted, skipped, status) "
@@ -284,15 +334,21 @@ def show_stats(conn: sqlite3.Connection) -> None:
         return
 
     labeled = conn.execute(
-        "SELECT COUNT(*) FROM reports WHERE turbulence IS NOT NULL "
-        "AND turbulence != 'None' AND turbulence != ''").fetchone()[0]
+        "SELECT COUNT(*) FROM reports WHERE turbulence IS NOT NULL").fetchone()[0]
     print(f"With turbulence label: {labeled:,} ({100*labeled/total:.1f}%)")
+
+    pireps = conn.execute(
+        "SELECT COUNT(*) FROM reports WHERE report_type LIKE '%PIREP%'").fetchone()[0]
+    trainable = conn.execute(
+        "SELECT COUNT(*) FROM reports WHERE report_type LIKE '%PIREP%' "
+        "AND turbulence IS NOT NULL").fetchone()[0]
+    print(f"Pilot reports (PIREP/Urgent): {pireps:,}")
+    print(f"TRAINABLE (PIREP + label):    {trainable:,}")
 
     print("\nTurbulence value distribution:")
     for val, n in conn.execute(
         "SELECT turbulence, COUNT(*) c FROM reports "
-        "WHERE turbulence IS NOT NULL AND turbulence NOT IN ('None','') "
-        "GROUP BY turbulence ORDER BY c DESC LIMIT 20"):
+        "WHERE turbulence IS NOT NULL GROUP BY turbulence ORDER BY c DESC LIMIT 20"):
         print(f"  {str(val):<24} {n:>7,}")
 
     print("\nReport types:")
@@ -312,14 +368,63 @@ def show_stats(conn: sqlite3.Connection) -> None:
     print(f"Most recent pull: {last[:19] if last else '-'}")
 
 
+HEALTH_MAX_AGE_MIN = 30   # ~3 missed polls at POLL_SECONDS=600
+
+
+def check_health(conn: sqlite3.Connection, max_age_min: int) -> int:
+    """
+    Exit 0 if collection is healthy, 1 if not.
+
+    A stalled collector and a quiet feed look identical from outside, and with a
+    ~90-minute AWC cache window a silent stall is unrecoverable data loss. This is
+    the check that tells them apart.
+    """
+    row = conn.execute(
+        "SELECT ran_at, inserted FROM runs WHERE status='ok' "
+        "ORDER BY id DESC LIMIT 1").fetchone()
+    total = conn.execute("SELECT COUNT(*) FROM reports").fetchone()[0]
+
+    if row is None:
+        print("UNHEALTHY: no successful run has ever been recorded.")
+        return 1
+
+    last = datetime.fromisoformat(row[0])
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    age_min = (datetime.now(timezone.utc) - last).total_seconds() / 60
+
+    recent_fail = conn.execute(
+        "SELECT COUNT(*) FROM runs WHERE status='failed' "
+        "AND ran_at > datetime('now', '-1 hour')").fetchone()[0]
+
+    print(f"last successful pull : {row[0][:19]}Z  ({age_min:.1f} min ago)")
+    print(f"rows collected       : {total:,}")
+    print(f"failed runs (1h)     : {recent_fail}")
+
+    if age_min > max_age_min:
+        print(f"\nUNHEALTHY: no successful pull in {age_min:.0f} min "
+              f"(threshold {max_age_min}). Data is being lost right now.")
+        return 1
+
+    print("\nHEALTHY")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--once", action="store_true", help="single pull then exit")
     ap.add_argument("--stats", action="store_true", help="summarize stored data")
+    ap.add_argument("--health", action="store_true",
+                    help="exit 0 if collecting normally, 1 if stalled")
+    ap.add_argument("--max-age-min", type=int, default=HEALTH_MAX_AGE_MIN,
+                    help="minutes without a successful pull before unhealthy")
     ap.add_argument("--db", default=str(DB_PATH))
     args = ap.parse_args()
 
     conn = init_db(Path(args.db))
+
+    if args.health:
+        return check_health(conn, args.max_age_min)
 
     if args.stats:
         show_stats(conn)

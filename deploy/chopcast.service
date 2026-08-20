@@ -1,0 +1,35 @@
+# ChopCast PIREP collector.
+# Install: sudo cp deploy/chopcast.service /etc/systemd/system/
+#          sudo systemctl daemon-reload && sudo systemctl enable --now chopcast
+[Unit]
+Description=ChopCast PIREP collector (AWC aircraft reports)
+Documentation=https://github.com/SrivatsaChilla/ChopCast
+# network-online, not just network: the first poll fires immediately at boot and
+# would otherwise race DHCP and fail its retries before the interface is up.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/home/ec2-user/ChopCast
+# WorkingDirectory matters: DB_PATH and collector.log are relative paths.
+ExecStart=/home/ec2-user/ChopCast/venv/bin/python collector.py
+Environment=PYTHONUNBUFFERED=1
+
+# The collector loops internally and handles SIGTERM cleanly, so systemd only
+# needs to cover hard crashes and reboots.
+Restart=always
+RestartSec=60
+KillSignal=SIGTERM
+TimeoutStopSec=90
+
+# Modest hardening. The process only needs to write inside its own directory.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/ec2-user/ChopCast
+
+[Install]
+WantedBy=multi-user.target

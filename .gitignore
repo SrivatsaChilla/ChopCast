@@ -1,0 +1,15 @@
+# Collected data — never commit; the DB grows without bound
+pireps.db
+pireps_backup*.db
+snapshot.csv
+collector.log
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store

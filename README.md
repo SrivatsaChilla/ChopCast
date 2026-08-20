@@ -93,14 +93,19 @@ This repo currently uses the aircraft reports cache:
 https://aviationweather.gov/data/cache/aircraftreports.cache.csv.gz
 ```
 
-Important constraint: AWC only serves a recent rolling window of aircraft
-reports. The dataset must therefore accrue over time. Start the collector early;
-it is the bottleneck for the whole project.
+**Important constraint:** the cache is a rolling **~90-minute** window, measured
+live rather than assumed. There is no backfill endpoint, so every hour the
+collector is not running is an hour of data that cannot be recovered. The dataset
+accrues only while you are collecting, which makes this the bottleneck for the
+whole project.
+
+Measured accrual: **~32,000 reports/day**, of which **~1,500-2,400/day** are
+labeled pilot reports.
 
 ## Repository Status
 
 Implemented now:
-Z
+
 - `explore.py` discovers the real AWC cache schema.
 - `collector.py` polls the cache, deduplicates reports, and stores them in
   SQLite.
@@ -189,10 +194,11 @@ Then run the continuous collector:
 python collector.py
 ```
 
-Check progress at any time:
+Check progress and liveness at any time:
 
 ```bash
-python collector.py --stats
+python collector.py --stats     # how much data, and what kind
+python collector.py --health    # exit 0 if collecting, 1 if stalled
 ```
 
 The collector stores data in `pireps.db`. Each row is stored twice:
@@ -201,23 +207,23 @@ The collector stores data in `pireps.db`. Each row is stored twice:
 - full `raw_json` so bad extraction choices can be fixed later without
   recollecting weeks of data
 
-Deduplication uses a hash of:
+Deduplication uses a hash of `obs_time + lat + lon + raw_text`. The cache is a
+rolling snapshot, so repeated polls re-serve the same reports; without dedup,
+duplicates leak across the train/test split and inflate metrics. Latitude and
+longitude are formatted to fixed precision before hashing, because a missing
+value elsewhere in a pull can flip the column from `int64` to `float64` and make
+`37` and `37.0` hash differently.
 
-```text
-obs_time + lat + lon + raw_text
-```
+### Run it on a server, not your laptop
 
-This matters because the AWC cache is a rolling snapshot. Repeated polls will
-serve many of the same reports again. Without deduplication, duplicates will
-leak across train/test splits and inflate model metrics.
+With a ~90-minute window, a laptop that sleeps loses data every time you close
+the lid. **See [deploy/RUNBOOK.md](deploy/RUNBOOK.md)** for a step-by-step AWS EC2
+deployment: systemd service, boot persistence, health checks, and nightly S3
+backups. Roughly $6-8/month, often $0 on intro credits.
 
-### Collection Reality Check
-
-Run `--stats` about 24 hours apart and compare totals. That gives the real
-reports-per-day accrual rate. Severe turbulence is rare, so class imbalance will
-be one of the central modeling problems.
-
-Run the collector somewhere stable. A sleeping laptop means gaps in the record.
+Because a stalled collector and a quiet feed look identical from outside, check
+`--health` every few days. It exits non-zero if no successful pull has landed
+within the threshold.
 
 ## Phase 2: Parse And Label
 

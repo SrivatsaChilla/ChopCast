@@ -97,8 +97,21 @@ https://aviationweather.gov/data/cache/aircraftreports.cache.csv.gz
 ```
 
 The collector currently uses the Aviation Weather Center aircraft reports cache.
-The cache provides recent aircraft reports and must be polled over time because
-historical depth is limited.
+
+**Measured live 2026-08-20 (supersedes earlier estimates):**
+
+| Property | Value |
+| --- | --- |
+| Cache window | rolling **~90 minutes** (`observation_time` 00:08-01:37Z) |
+| Snapshot size | ~1,530 rows, 44 columns, ~85 KB gzipped |
+| Accrual | ~32,000 reports/day |
+| Report mix | **91.8% AIREP**, 8.2% PIREP/Urgent PIREP |
+| Turbulence label yield | 6.6% of all rows; **67% of pilot reports** |
+| Labeled PIREPs | ~1,500-2,400/day |
+| Storage | ~2.2 KB/row (~2 GB/month raw, ~210 MB/month gzipped) |
+
+There is no backfill endpoint. Downtime is permanent data loss, which is why the
+collector must run on an always-on host (`deploy/RUNBOOK.md`).
 
 ### 6.2 Weather Observations
 
@@ -486,8 +499,18 @@ before adding complex weather fusion or transformer modeling.
 
 ## 14. Open Decisions
 
-- What exact turbulence label mapping should be used after inspecting real data?
-- Should AIREPs be excluded from the text classifier?
+- ~~What exact turbulence values appear?~~ **Answered:** `LGT`, `NEG`, `MOD`,
+  `LGT-MOD` observed. **No `SEV` in 2,600 reports** — plan for three classes.
+  Turbulence appears in up to two layer groups (`turbulence_intensity` and
+  `turbulence_intensity.1`); the mapper must take the max across both.
+- ~~Should AIREPs be excluded from the text classifier?~~ **Answered:** yes for
+  text (they carry no prose), but *keep them* — they supply `temp_c`,
+  `wind_dir_degrees`, and `wind_speed_kt` **at flight level** on ~91% of rows,
+  which is a better weather-fusion source than surface METAR.
+- **NEW, unresolved:** after stripping `/TB` to prevent leakage, **62% of labeled
+  PIREPs have zero residual text** (median residual: 0 chars; only 2% exceed 20
+  chars). The text-classification premise in Section 2 may not be supportable.
+  Section 8.4 likely needs reframing toward structured/atmospheric features.
 - What minimum text length makes a report usable for NLP?
 - Should altitude be used as a model feature or only for filtering and analysis?
 - Should the final map be a static artifact, notebook output, or web app?
@@ -537,4 +560,5 @@ before adding complex weather fusion or transformer modeling.
 | Date | Version | Notes |
 | --- | --- | --- |
 | 2026-08-16 | 0.1 | Initial requirements draft. |
+| 2026-08-20 | 0.2 | Live schema verified; cache window corrected 15 days -> ~90 min; label yield, report mix, and severity distribution measured; leakage-residual finding recorded. |
 

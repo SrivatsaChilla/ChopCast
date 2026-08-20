@@ -12,6 +12,8 @@ Run:  python explore.py
 Saves a local snapshot so you can work offline afterwards.
 """
 
+from __future__ import annotations
+
 import gzip
 import io
 import sys
@@ -27,14 +29,14 @@ SNAPSHOT = Path("snapshot.csv")
 # Candidate column names. AWC has renamed fields before (Sept 2025), so we
 # search rather than assume. Discovery output will tell you the real ones.
 CANDIDATES = {
-    "raw_text": ["rawOb", "raw_text", "raw", "report", "rawReport"],
-    "turbulence": ["turbulence", "tbInt1", "turbInt", "tb", "turbulenceIntensity"],
-    "report_type": ["reportType", "obsType", "type", "acReportType"],
-    "aircraft": ["acType", "aircraftType", "actype", "aircraft_ref"],
-    "lat": ["lat", "latitude"],
-    "lon": ["lon", "longitude"],
-    "altitude": ["altFt", "fltLvl", "altitude_ft_msl", "flightLevel", "alt"],
-    "obs_time": ["obsTime", "observation_time", "receiptTime", "time"],
+    "raw_text": ["raw_text", "rawOb", "raw", "report", "rawReport"],
+    "turbulence": ["turbulence_intensity", "turbulenceIntensity", "tbInt1", "turbulence"],
+    "report_type": ["report_type", "reportType", "obsType", "acReportType"],
+    "aircraft": ["aircraft_ref", "acType", "aircraftType"],
+    "lat": ["latitude", "lat"],
+    "lon": ["longitude", "lon"],
+    "altitude": ["altitude_ft_msl", "altFt", "flightLevel", "fltLvl"],
+    "obs_time": ["observation_time", "obsTime", "receiptTime", "time"],
 }
 
 
