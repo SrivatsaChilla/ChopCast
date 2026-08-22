@@ -132,6 +132,35 @@ CREATE INDEX IF NOT EXISTS idx_turb ON reports(turbulence);
 CREATE INDEX IF NOT EXISTS idx_obs  ON reports(obs_time);
 CREATE INDEX IF NOT EXISTS idx_type ON reports(report_type);
 
+-- Working sets. AIREPs are ~93% of rows and carry no prose, so they are
+-- noise for the text model -- but they supply 99.8% of the temp/wind
+-- observations at flight level, which is the Phase 5 weather source that
+-- replaces surface METAR. So we filter here rather than delete anything.
+-- 'AIREP' does not match '%PIREP%'; 'Urgent PIREP' does.
+CREATE VIEW IF NOT EXISTS pireps AS
+    SELECT * FROM reports WHERE report_type LIKE '%PIREP%';
+
+-- Phase 2/3 working set: pilot reports that carry a turbulence label in
+-- either layer group. /TB is deliberately left in raw_text -- stripping it
+-- is the Phase 2 cleaner's job, and hiding it here would make that harder
+-- to verify.
+CREATE VIEW IF NOT EXISTS trainable AS
+    SELECT hash, obs_time, raw_text,
+           turbulence, turbulence_2, turbulence_type, turbulence_freq,
+           aircraft, lat, lon, altitude
+    FROM pireps
+    WHERE turbulence IS NOT NULL OR turbulence_2 IS NOT NULL;
+
+-- Phase 5 weather field: AIREPs as atmospheric observations at altitude.
+-- temp_c / wind_* are not typed columns, so they come out of raw_json.
+CREATE VIEW IF NOT EXISTS wx_altitude AS
+    SELECT hash, obs_time, lat, lon, altitude,
+           CAST(json_extract(raw_json,'$.temp_c')           AS REAL) AS temp_c,
+           CAST(json_extract(raw_json,'$.wind_dir_degrees') AS REAL) AS wind_dir_degrees,
+           CAST(json_extract(raw_json,'$.wind_speed_kt')    AS REAL) AS wind_speed_kt
+    FROM reports
+    WHERE report_type = 'AIREP';
+
 CREATE TABLE IF NOT EXISTS runs (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     ran_at     TEXT NOT NULL,
@@ -337,13 +366,12 @@ def show_stats(conn: sqlite3.Connection) -> None:
         "SELECT COUNT(*) FROM reports WHERE turbulence IS NOT NULL").fetchone()[0]
     print(f"With turbulence label: {labeled:,} ({100*labeled/total:.1f}%)")
 
-    pireps = conn.execute(
-        "SELECT COUNT(*) FROM reports WHERE report_type LIKE '%PIREP%'").fetchone()[0]
-    trainable = conn.execute(
-        "SELECT COUNT(*) FROM reports WHERE report_type LIKE '%PIREP%' "
-        "AND turbulence IS NOT NULL").fetchone()[0]
+    pireps = conn.execute("SELECT COUNT(*) FROM pireps").fetchone()[0]
+    trainable = conn.execute("SELECT COUNT(*) FROM trainable").fetchone()[0]
+    wx = conn.execute("SELECT COUNT(*) FROM wx_altitude").fetchone()[0]
     print(f"Pilot reports (PIREP/Urgent): {pireps:,}")
     print(f"TRAINABLE (PIREP + label):    {trainable:,}")
+    print(f"Weather obs at altitude:      {wx:,}  (AIREPs, for Phase 5)")
 
     print("\nTurbulence value distribution:")
     for val, n in conn.execute(

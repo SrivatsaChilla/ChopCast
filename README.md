@@ -235,6 +235,27 @@ Expected output:
 raw_text_clean, severity_label, lat, lon, flight_level, aircraft_type, obs_time
 ```
 
+### Working sets: use the views, not the raw table
+
+The database ships three views so you never hand-filter report types:
+
+| View | Rows | Use it for |
+| --- | --- | --- |
+| `pireps` | pilot reports only | anything text-related |
+| `trainable` | pilot reports carrying a turbulence label | the Phase 3 dataset |
+| `wx_altitude` | AIREP temperature and wind at flight level | Phase 5 weather fusion |
+
+```sql
+SELECT raw_text, turbulence FROM trainable;
+```
+
+**Why AIREPs are kept even though they have no prose.** They are ~93% of rows and
+useless to a text model, so deleting them is tempting. But they supply **99.8% of all
+temperature and wind observations**, recorded at a median 37,000 ft — that is the
+weather-at-altitude source that replaces surface METAR in Phase 5, and surface METAR
+cannot describe turbulence at FL340. Deleting them would also be irreversible: the AWC
+cache is a ~90-minute window with no backfill. Filter at query time; never delete.
+
 Key tasks:
 
 - Parse or verify `/TB`, `/OV`, `/FL`, `/TP`, and `/TM`.
