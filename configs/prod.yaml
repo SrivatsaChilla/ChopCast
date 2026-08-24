@@ -1,0 +1,15 @@
+# Production profile overlay.
+# Loaded after configs/default.yaml; values here win.
+
+logging:
+  level: "INFO"
+  format: "json"
+  destination: "both"
+
+api:
+  log_level: "warning"
+  include_disclaimer_header: true
+
+monitoring:
+  drift:
+    enabled: true

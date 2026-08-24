@@ -1,0 +1,16 @@
+# Development profile overlay.
+# Loaded after configs/default.yaml; values here win.
+
+logging:
+  level: "DEBUG"
+  format: "console"
+
+database:
+  journal_mode: "TRUNCATE"
+
+collector:
+  poll_seconds: 60
+  max_retries: 2
+
+api:
+  port: 8001

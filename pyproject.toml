@@ -1,0 +1,186 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chopcast"
+version = "0.1.0"
+description = "Turbulence-from-text research pipeline for PIREPs"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "Proprietary"}
+authors = [
+    {name = "musiimenta-joachim"},
+]
+keywords = ["aviation", "turbulence", "pirep", "nlp", "ml"]
+
+# Runtime dependencies. Pinned to compatible-release (~=) where upstream
+# stability is good; pinned to exact (==) where reproducibility matters.
+dependencies = [
+    "pandas>=2.1,<3",
+    "requests>=2.31,<3",
+    "pydantic>=2.5,<3",
+    "pydantic-settings>=2.1,<3",
+    "PyYAML>=6.0,<7",
+    "structlog>=24.1,<25",
+    "click>=8.1,<9",
+    "joblib>=1.3,<2",
+    "python-dateutil>=2.8,<3",
+]
+
+[project.optional-dependencies]
+# ML and serving — installed in M3+
+ml = [
+    "scikit-learn>=1.4,<2",
+    "numpy>=1.26,<3",
+]
+transformer = [
+    "torch>=2.1,<3",
+    "transformers>=4.36,<5",
+    "datasets>=2.14,<3",
+]
+serving = [
+    "fastapi>=0.110,<1",
+    "uvicorn[standard]>=0.27,<1",
+]
+map = [
+    "folium>=0.15,<1",
+    "geopandas>=0.14,<1",
+]
+monitoring = [
+    "prometheus-client>=0.19,<1",
+]
+dev = [
+    "chopcast[ml,transformer,serving,map,monitoring]",
+    "pytest>=7.4,<9",
+    "pytest-cov>=4.1,<6",
+    "responses>=0.25,<1",
+    "freezegun>=1.4,<2",
+    "hypothesis>=6.92,<7",
+    "mypy>=1.7,<2",
+    "ruff>=0.4,<1",
+    "types-PyYAML>=6.0,<7",
+    "types-requests>=2.31,<3",
+]
+
+[project.scripts]
+chopcast = "chopcast.cli:main"
+chopcast-collector = "chopcast.collector.cli:main"
+chopcast-parse = "chopcast.parser.cli:main"
+chopcast-train = "chopcast.training.cli:main"
+chopcast-eval = "chopcast.evaluation.cli:main"
+chopcast-registry = "chopcast.registry.cli:main"
+chopcast-map = "chopcast.map.cli:main"
+
+[project.urls]
+Documentation = "https://github.com/musiimenta-joachim/ChopCast"
+Source = "https://github.com/musiimenta-joachim/ChopCast"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["chopcast*"]
+
+[tool.setuptools.package-data]
+chopcast = ["py.typed"]
+
+# ---------------------------------------------------------------------------
+# Ruff
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["chopcast", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "A",   # flake8-builtins
+    "C4",  # flake8-comprehensions
+    "PT",  # flake8-pytest-style
+    "RUF", # ruff-specific
+]
+ignore = [
+    "E501", # line length is handled by the formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "B011", # asserts are fine in tests
+    "N802", # test function names may be long
+]
+"scripts/**" = [
+    "T201", # print is fine in scripts
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["chopcast"]
+
+# ---------------------------------------------------------------------------
+# Mypy
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_any_explicit = false  # third-party libs sometimes force Any
+disallow_any_generics = true
+no_implicit_optional = true
+check_untyped_defs = true
+ignore_missing_imports = false
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_any_explicit = false
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "7.4"
+testpaths = ["tests"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "-m", "not integration",
+]
+markers = [
+    "integration: integration tests (deselect with -m 'not integration')",
+    "slow: slow tests",
+]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:botocore.*",
+    "ignore::DeprecationWarning:dateutil.*",
+]
+
+# ---------------------------------------------------------------------------
+# Coverage
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["chopcast"]
+omit = [
+    "tests/*",
+    "scripts/*",
+    "chopcast/__main__.py",
+]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "\\.\\.\\.",
+]

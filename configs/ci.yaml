@@ -1,0 +1,14 @@
+# CI profile overlay. All values written under a temp directory; no real I/O.
+
+paths:
+  root: "/tmp/chopcast-ci"
+
+logging:
+  level: "WARNING"
+
+collector:
+  poll_seconds: 1
+  max_retries: 1
+
+database:
+  journal_mode: "TRUNCATE"

@@ -10,6 +10,67 @@ venv/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.installed.cfg
 
 # macOS
 .DS_Store
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.mypy_cache/
+.ruff_cache/
+.tox/
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Local data and models (per ADR-0002, ADR-0006)
+data/raw/
+data/processed/
+data/features/
+data/weather/
+models/registry/
+models/manifest.json
+snapshot.csv
+pireps.db*
+pireps_backup.db
+backups/
+
+# Runtime artifacts
+runs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
