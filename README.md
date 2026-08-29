@@ -40,7 +40,7 @@ pytest
 
 Pilots file PIREPs that include a structured `/TB` turbulence field plus free-text description. The plan:
 
-1. **Collect** PIREPs continuously (the AWC cache is a 15-day rolling window; we accumulate over time).
+1. **Collect** PIREPs continuously (the AWC cache is a **~90-minute** rolling window, measured live; we accumulate over time).
 2. **Strip `/TB` from the model input** to prevent label leakage — the single most important failure mode of PIREP classifier projects. See [ADR-0003](docs/adr/0003-leakage-prevention.md).
 3. **Train** a 4-class severity classifier (`None` / `Light` / `Moderate` / `Severe`). Start with a TF-IDF + LogReg baseline; upgrade to a DistilBERT classifier behind the same `Model` protocol.
 4. **Map** the reports and predictions on an interactive map.
@@ -107,8 +107,48 @@ See [ADR-0002](docs/adr/0002-repository-layout.md).
 
 - **AWC aircraft reports cache:** `https://aviationweather.gov/data/cache/aircraftreports.cache.csv.gz`
 - No API key required; AWC requires a custom User-Agent.
-- The cache is a rolling window (recent ~15 days). The collector must run continuously; gaps mean lost data.
+- The cache is a rolling window of roughly **90 minutes** (measured: `observation_time`
+  spanning 00:08–01:37Z in one pull). There is no backfill endpoint, so the collector
+  must run continuously — any hour it is down is an hour of reports that cannot be recovered.
 - See [DATA_ENGINEERING.md](docs/DATA_ENGINEERING.md) §6 for the schema and the rationale for storing raw data immutably.
+
+### Working sets
+
+Query the views, not the `reports` table directly:
+
+| View | Contents | Use it for |
+| --- | --- | --- |
+| `pireps` | `PIREP` + `Urgent PIREP` only | anything text-related |
+| `trainable` | pilot reports labeled in either turbulence layer | the supervised dataset |
+| `wx_altitude` | AIREP temperature and wind at flight level | Phase 5 weather fusion |
+
+```sql
+SELECT raw_text, turbulence FROM trainable;
+```
+
+`trainable` still contains `/TB` in `raw_text` by design — removing it belongs to
+`chopcast.processing.cleaner` and nothing else (ADR-0003).
+
+### Why AIREPs are kept
+
+AIREPs are roughly 93% of collected rows and carry no prose, so deleting them looks
+obvious. Measured against live data, it is not:
+
+| | kept | if AIREPs were deleted |
+| --- | --- | --- |
+| wind readings | 2,411 | **1** |
+| temperature readings | 2,427 | **15** |
+
+They hold ~99.8% of all temperature and wind observations, recorded at a median
+37,000 ft against 14,500 ft for pilot reports. Deletion is also irreversible: with a
+~90-minute cache window and no backfill, those observations cannot be re-collected.
+**Filter at query time; never delete.**
+
+One limitation to record: AIREPs **cannot** be co-located with PIREPs for weather
+fusion. 99.6% sit outside the continental US on oceanic tracks, the median distance
+from a labeled PIREP to the nearest AIREP is ~1,478 km, and only 2 of 328 labeled
+reports find a match even at 400 km / 90 min / 10,000 ft. Phase 5 needs gridded
+RAP/HRRR fields. The AIREPs remain useful as a standalone oceanic dataset.
 
 ## License
 
