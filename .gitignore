@@ -74,3 +74,4 @@ Thumbs.db
 
 # Jupyter
 .ipynb_checkpoints/
+.venv-test/

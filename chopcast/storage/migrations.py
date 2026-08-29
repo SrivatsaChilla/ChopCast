@@ -41,8 +41,71 @@ MIGRATIONS: tuple[Migration, ...] = (
             """
         ),
     ),
-    # Future migrations go here. Example:
-    # Migration(version=2, name="add_source_etag", sql="ALTER TABLE ..."),
+    Migration(
+        version=2,
+        name="add_turbulence_layers",
+        sql=(
+            """
+            -- Migrations may run against a bare connection (before the
+            -- base SCHEMA is applied), so this migration is self-contained:
+            -- it ensures the table exists, then evolves it.
+            CREATE TABLE IF NOT EXISTS reports (
+                hash          TEXT PRIMARY KEY,
+                fetched_at    TEXT NOT NULL,
+                obs_time      TEXT,
+                report_type   TEXT,
+                raw_text      TEXT,
+                turbulence    TEXT,
+                aircraft      TEXT,
+                lat           REAL,
+                lon           REAL,
+                altitude      REAL,
+                raw_json      TEXT NOT NULL,
+                source_url    TEXT NOT NULL,
+                source_etag   TEXT,
+                CONSTRAINT lat_range CHECK (lat IS NULL OR lat BETWEEN -90 AND 90),
+                CONSTRAINT lon_range CHECK (lon IS NULL OR lon BETWEEN -180 AND 180)
+            );
+            ALTER TABLE reports ADD COLUMN turbulence_2 TEXT;
+            ALTER TABLE reports ADD COLUMN turbulence_type TEXT;
+            ALTER TABLE reports ADD COLUMN turbulence_freq TEXT;
+            """
+        ),
+    ),
+    Migration(
+        version=3,
+        name="working_set_views",
+        sql=(
+            """
+            -- AIREPs are ~93% of rows and carry no prose, so they are noise
+            -- for the text model. They are NOT deleted: they hold 99.8% of
+            -- the temp/wind observations at flight level. Filter, never drop.
+            -- 'AIREP' does not match '%PIREP%'; 'Urgent PIREP' does.
+            CREATE VIEW IF NOT EXISTS pireps AS
+                SELECT * FROM reports WHERE report_type LIKE '%PIREP%';
+
+            -- The supervised working set. /TB is deliberately still present
+            -- in raw_text: removing it is chopcast.processing.cleaner's job
+            -- and its alone (ADR-0003).
+            CREATE VIEW IF NOT EXISTS trainable AS
+                SELECT hash, obs_time, raw_text,
+                       turbulence, turbulence_2, turbulence_type, turbulence_freq,
+                       aircraft, lat, lon, altitude
+                FROM pireps
+                WHERE turbulence IS NOT NULL OR turbulence_2 IS NOT NULL;
+
+            -- AIREPs as atmospheric observations. temp/wind are not typed
+            -- columns, so they are read back out of raw_json.
+            CREATE VIEW IF NOT EXISTS wx_altitude AS
+                SELECT hash, obs_time, lat, lon, altitude,
+                       CAST(json_extract(raw_json,'$.temp_c')           AS REAL) AS temp_c,
+                       CAST(json_extract(raw_json,'$.wind_dir_degrees') AS REAL) AS wind_dir_degrees,
+                       CAST(json_extract(raw_json,'$.wind_speed_kt')    AS REAL) AS wind_speed_kt
+                FROM reports
+                WHERE report_type = 'AIREP';
+            """
+        ),
+    ),
 )
 
 
