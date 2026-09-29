@@ -80,9 +80,12 @@ def clean_text(raw_text: str, config: CleanerConfig) -> str:
 
     # Step 4: structural self-check. If any leakage tag survived the
     # strip, raise. This is the behavioural layer of defense — it
-    # catches bugs in the regex above.
+    # catches bugs in the regex above. We do NOT require a trailing
+    # word boundary because `/TB` glued to a value (e.g. `/TBONOACAT`)
+    # should still be flagged — even though such a value is also a
+    # leakage of intent, the conservative move is to refuse it.
     for tag in config.strip_fields:
-        if re.search(rf"/{re.escape(tag.lstrip('/'))}\b", text, re.IGNORECASE):
+        if re.search(rf"/{re.escape(tag.lstrip('/'))}", text, re.IGNORECASE):
             raise LeakageError(
                 f"cleaned text still contains leakage tag {tag!r}: {text[:80]!r}"
             )

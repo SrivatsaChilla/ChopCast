@@ -81,6 +81,14 @@ def migrate(legacy_path: Path, paths: Paths) -> tuple[int, int]:
     new_path = paths.raw_db_path
     new_conn = sqlite3.connect(new_path)
     new_conn.row_factory = sqlite3.Row
+    # Ensure the destination schema exists. Without this, opening a
+    # brand-new DB and immediately INSERTing into `reports` would
+    # raise `OperationalError: no such table`.
+    from chopcast.storage.migrations import MIGRATIONS, apply_migrations
+    from chopcast.storage.schema import SCHEMA
+
+    apply_migrations(new_conn, MIGRATIONS)
+    new_conn.executescript(SCHEMA)
     inserted = 0
     skipped = 0
     try:
