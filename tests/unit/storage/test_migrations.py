@@ -39,7 +39,8 @@ def test_apply_partial_set() -> None:
         new1 = apply_migrations(conn, first)
         new2 = apply_migrations(conn, MIGRATIONS)
         assert new1 == [1]
-        assert new2 == []
+        # Every migration after the first is applied by the second call.
+        assert new2 == [m.version for m in MIGRATIONS[1:]]
     finally:
         conn.close()
 
@@ -54,6 +55,6 @@ def test_failed_migration_rolls_back(monkeypatch: pytest.MonkeyPatch) -> None:
             apply_migrations(conn, bad)
         # The first migration should still be applied; the failing one not.
         rows = conn.execute("SELECT MAX(version) FROM schema_migrations").fetchone()
-        assert rows[0] == 1
+        assert rows[0] == max(m.version for m in MIGRATIONS)
     finally:
         conn.close()

@@ -109,11 +109,22 @@ inbound rules* → **My IP** to refresh it.
 ```bash
 git clone https://github.com/SrivatsaChilla/ChopCast.git
 cd ChopCast
-bash deploy/bootstrap.sh
+CHOPCAST_CONTACT=you@example.com bash deploy/bootstrap.sh
 ```
 
-Installs Python/git/sqlite, builds a venv from `requirements.txt`, runs **one test
-pull** before enabling anything, then installs and starts the systemd service.
+Installs Python 3.11 + git + sqlite, creates `.venv`, installs the `chopcast`
+package, writes `.env`, validates the config, runs **one test pull**, then starts
+the systemd service.
+
+**`CHOPCAST_CONTACT` is not optional.** AWC filters generic clients, so the
+User-Agent has to carry a real contact address. Omit it and bootstrap still runs,
+but it stops and tells you to set it before collecting.
+
+To deploy a branch instead of `main` (e.g. while PR #2 is unmerged):
+
+```bash
+BRANCH=views-on-new-architecture CHOPCAST_CONTACT=you@example.com bash deploy/bootstrap.sh
+```
 
 ✅ *Confirm:* the script ends with `done.` and prints a `seen=… new=… dup=…` line.
 
@@ -130,8 +141,7 @@ Wait ~10 minutes for a second poll, then:
 
 ```bash
 cd ~/ChopCast
-./venv/bin/python collector.py --health   # expect: HEALTHY, exit 0
-./venv/bin/python collector.py --stats
+./.venv/bin/chopcast-collector status
 ```
 
 **The number that proves correctness** is not `new=` — it is `dup=`. A large `dup=`
@@ -154,13 +164,15 @@ Then on the **instance**:
 ```bash
 cd ~/ChopCast
 sudo systemctl stop chopcast
-sqlite3 pireps.db "ATTACH 'pireps.db.seed' AS s; INSERT OR IGNORE INTO reports SELECT * FROM s.reports;"
+./.venv/bin/chopcast-collector migrate-legacy ~/pireps.db.seed
 sudo systemctl start chopcast
-./venv/bin/python collector.py --stats
+./.venv/bin/chopcast-collector status
 ```
 
-`INSERT OR IGNORE` plus the content hash makes this safe — overlapping reports collapse
-automatically. Stopping the service first avoids two writers on one SQLite file.
+The package ships a `migrate-legacy` command for exactly this: it re-reads the old
+rows and re-hashes them under the current scheme, so overlapping reports collapse
+instead of duplicating. Stop the service first — two writers on one SQLite file is
+how you get `database is locked`.
 
 > **From this moment the EC2 copy is authoritative.** The laptop's `pireps.db` is a
 > stale scratch copy. Do not merge it back later — pull fresh from S3 instead.
@@ -174,10 +186,10 @@ sudo reboot
 # wait ~40s, reconnect
 ssh -i ~/.ssh/chopcast-key.pem ec2-user@<PUBLIC_IP>
 systemctl status chopcast
-cd ~/ChopCast && ./venv/bin/python collector.py --health
+cd ~/ChopCast && ./.venv/bin/chopcast-collector status
 ```
 
-✅ *Confirm:* the service came back **without you starting it**, and `--stats` shows no
+✅ *Confirm:* the service came back **without you starting it**, and `status` shows no
 duplicated rows across the restart. That is what `WantedBy=multi-user.target` buys you:
 start on boot, no login required.
 
@@ -236,14 +248,15 @@ and it forces the backup path to stay working.
 
 | Task | Command |
 |---|---|
-| Is it alive? | `./venv/bin/python collector.py --health` |
-| How much data? | `./venv/bin/python collector.py --stats` |
+| Is it alive, and how much data? | `./.venv/bin/chopcast-collector status` |
+| What failed validation? | `./.venv/bin/chopcast-collector rejected` |
+| Where does anything live? | `./.venv/bin/chopcast paths` |
 | Recent logs | `journalctl -u chopcast -n 50` |
 | Restart | `sudo systemctl restart chopcast` |
-| Deploy new code | `git pull && sudo systemctl restart chopcast` |
+| Deploy new code | `git pull && ./.venv/bin/pip install -q -e . && sudo systemctl restart chopcast` |
 | Disk space | `df -h /` |
 
-**Check `--health` every few days.** With a 90-minute window, a stall you notice a week
+**Check `status` every few days.** With a 90-minute window, a stall you notice a week
 late is a week of data you cannot get back.
 
 ### If it stops collecting

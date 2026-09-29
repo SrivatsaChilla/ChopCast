@@ -136,6 +136,9 @@ class ReportStore(Protocol):
         raw_text: str | None,
         turbulence: str | None,
         aircraft: str | None,
+        turbulence_2: str | None = None,
+        turbulence_type: str | None = None,
+        turbulence_freq: str | None = None,
         lat: float | None,
         lon: float | None,
         altitude: float | None,
@@ -210,8 +213,6 @@ class SqliteReportStore:
         self._conn.execute("PRAGMA foreign_keys = ON")
         # Initialise schema, including any unapplied migrations.
         apply_migrations(self._conn, MIGRATIONS)
-        # Belt-and-braces: also run the canonical DDL. Migrations and
-        # `IF NOT EXISTS` make this idempotent.
         self._conn.executescript(SCHEMA)
 
     # ----- helpers --------------------------------------------------------
@@ -238,6 +239,9 @@ class SqliteReportStore:
         raw_text: str | None,
         turbulence: str | None,
         aircraft: str | None,
+        turbulence_2: str | None = None,
+        turbulence_type: str | None = None,
+        turbulence_freq: str | None = None,
         lat: float | None,
         lon: float | None,
         altitude: float | None,
@@ -255,8 +259,9 @@ class SqliteReportStore:
             cur = self._conn.execute(
                 "INSERT INTO reports "
                 "(hash, fetched_at, obs_time, report_type, raw_text, turbulence, "
+                " turbulence_2, turbulence_type, turbulence_freq, "
                 " aircraft, lat, lon, altitude, raw_json, source_url, source_etag) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     hash,
                     fetched_at.isoformat(),
@@ -264,6 +269,9 @@ class SqliteReportStore:
                     self._serialise(report_type),
                     self._serialise(raw_text),
                     self._serialise(turbulence),
+                    self._serialise(turbulence_2),
+                    self._serialise(turbulence_type),
+                    self._serialise(turbulence_freq),
                     self._serialise(aircraft),
                     self._serialise(lat),
                     self._serialise(lon),

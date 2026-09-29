@@ -78,7 +78,10 @@ Source = "https://github.com/musiimenta-joachim/ChopCast"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["chopcast*"]
+# `scripts` is imported by `chopcast-collector migrate-legacy`, so it has to
+# be installed alongside the package — otherwise the console script fails with
+# ModuleNotFoundError while running from source appears to work.
+include = ["chopcast*", "scripts*"]
 
 [tool.setuptools.package-data]
 chopcast = ["py.typed"]

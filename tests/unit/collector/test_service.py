@@ -46,6 +46,9 @@ def test_resolve_columns_finds_known_names() -> None:
     assert cols == {
         "raw_text": "rawOb",
         "turbulence": "turbulence",
+        "turbulence_2": None,
+        "turbulence_type": None,
+        "turbulence_freq": None,
         "report_type": "reportType",
         "aircraft": "acType",
         "lat": "lat",

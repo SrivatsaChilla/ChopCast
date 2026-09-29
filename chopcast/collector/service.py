@@ -37,15 +37,27 @@ class CollectionService(Protocol):
 # ---------------------------------------------------------------------------
 # The CSV from AWC has changed column names historically (Sept 2025 renames
 # were the most recent). We resolve at runtime rather than hardcoding.
+# Verified against a live AWC cache pull: the served columns are snake_case
+# (`turbulence_intensity`, `report_type`, ...). The camelCase spellings are
+# kept as fallbacks for the legacy/XML feed. Order matters -- first match wins.
+#
+# NB: matching is case-insensitive but NOT separator-insensitive, so
+# "turbulenceIntensity" does not match "turbulence_intensity". Omitting the
+# snake_case spelling leaves `turbulence` and `report_type` unresolved, which
+# stores NULL for the label and the PIREP/AIREP filter on every row -- with no
+# error anywhere. Do not remove these entries.
 CANDIDATES: dict[str, list[str]] = {
-    "raw_text": ["rawOb", "raw_text", "raw", "report", "rawReport"],
-    "turbulence": ["turbulence", "tbInt1", "turbInt", "tb", "turbulenceIntensity"],
-    "report_type": ["reportType", "obsType", "type", "acReportType"],
-    "aircraft": ["acType", "aircraftType", "actype", "aircraft_ref"],
-    "lat": ["lat", "latitude"],
-    "lon": ["lon", "longitude"],
-    "altitude": ["altFt", "fltLvl", "altitude_ft_msl", "flightLevel", "alt"],
-    "obs_time": ["obsTime", "observation_time", "receiptTime", "time"],
+    "raw_text": ["raw_text", "rawOb", "raw", "report", "rawReport"],
+    "turbulence": ["turbulence_intensity", "turbulence", "tbInt1", "turbInt", "tb", "turbulenceIntensity"],
+    "turbulence_2": ["turbulence_intensity.1"],
+    "turbulence_type": ["turbulence_type", "turbulenceType"],
+    "turbulence_freq": ["turbulence_freq", "turbulenceFreq"],
+    "report_type": ["report_type", "reportType", "obsType", "type", "acReportType"],
+    "aircraft": ["aircraft_ref", "acType", "aircraftType", "actype"],
+    "lat": ["latitude", "lat"],
+    "lon": ["longitude", "lon"],
+    "altitude": ["altitude_ft_msl", "altFt", "fltLvl", "flightLevel", "alt"],
+    "obs_time": ["observation_time", "obsTime", "receiptTime", "time"],
 }
 
 
@@ -70,6 +82,17 @@ def resolve_columns(df: pd.DataFrame) -> dict[str, str | None]:
         log.warning("collector.columns.unresolved", missing=missing)
     return resolved
 
+
+
+def _text_value(value: object) -> str | None:
+    """Stringify a value, but keep missing values as None.
+
+    `str(_clean_value(x))` turns a missing value into the literal string
+    "None", which then satisfies `turbulence IS NOT NULL` and poisons every
+    downstream filter. Absent stays absent.
+    """
+    cleaned = _clean_value(value)
+    return None if cleaned is None else str(cleaned)
 
 def _clean_value(value: Any) -> Any:
     """Replace NaN/None with Python None, leave everything else alone."""
@@ -216,10 +239,13 @@ class DefaultCollectionService:
                 hash=h,
                 fetched_at=started_at,
                 obs_time=str(obs_time_val) if obs_time_val is not None else None,
-                report_type=str(_clean_value(row.get("report_type"))),
+                report_type=_text_value(row.get("report_type")),
                 raw_text=str(raw_text_val) if raw_text_val is not None else None,
-                turbulence=str(_clean_value(row.get("turbulence"))),
-                aircraft=str(_clean_value(row.get("aircraft"))),
+                turbulence=_text_value(row.get("turbulence")),
+                turbulence_2=_text_value(row.get("turbulence_2")),
+                turbulence_type=_text_value(row.get("turbulence_type")),
+                turbulence_freq=_text_value(row.get("turbulence_freq")),
+                aircraft=_text_value(row.get("aircraft")),
                 lat=lat,
                 lon=lon,
                 altitude=_to_float(row.get("altitude")),
