@@ -163,6 +163,11 @@ filterwarnings = [
     "error",
     "ignore::DeprecationWarning:botocore.*",
     "ignore::DeprecationWarning:dateutil.*",
+    # joblib 1.5.3 sets `array.shape` while unpickling, which NumPy 2.5
+    # deprecated. It is a warning from a dependency, not a failure: the
+    # round trip succeeds and predictions match. TODO: remove once joblib
+    # ships a NumPy 2.5-clean release.
+    "ignore::DeprecationWarning:joblib.*",
 ]
 
 # ---------------------------------------------------------------------------
