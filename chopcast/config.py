@@ -161,7 +161,6 @@ class TfidfConfig(BaseModel):
 
 class TransformerTextConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     model_name: str = "distilbert-base-uncased"
     max_length: int = 128
     truncation: Literal["head", "tail", "head_tail"] = "head_tail"

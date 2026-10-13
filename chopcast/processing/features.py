@@ -21,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
-
+from chopcast.weather.features import WeatherFeatures
 
 @dataclass(frozen=True)
 class FeatureRow:
@@ -38,9 +38,10 @@ class FeatureRow:
     severity_label: str
     hour_of_day: int
     day_of_year: int
+    weather: WeatherFeatures | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d = {
             "hash": self.hash,
             "obs_time": self.obs_time.isoformat(),
             "lat": self.lat,
@@ -53,6 +54,16 @@ class FeatureRow:
             "hour_of_day": self.hour_of_day,
             "day_of_year": self.day_of_year,
         }
+        if self.weather:
+            w = self.weather
+            d.update({
+                "wind_speed": w.wind_speed,
+                "wind_direction": w.wind_direction,
+                "temperature": w.temperature,
+                "pressure": w.pressure,
+                "station_id": w.station_id,
+            })
+        return d
 
 
 def altitude_band(altitude_ft: int | None, bands: tuple[tuple[int, int], ...]) -> str | None:

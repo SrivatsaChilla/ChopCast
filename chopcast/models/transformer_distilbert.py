@@ -75,7 +75,7 @@ class TransformerTrainerSettings:
 # ---------------------------------------------------------------------------
 class StubTransformerModel:
     """A trivial transformer-shaped model used by tests.
-
+    
     Same behaviour as `StubModel` — predicts the majority class. The
     model_kind is "transformer" so the registry can distinguish it.
     """
@@ -103,7 +103,6 @@ class StubTransformerModel:
     def save(self, path: Path) -> None:
         path.mkdir(parents=True, exist_ok=True)
         (path / "TRANSFORMER_STUB.txt").write_text("stub transformer model\n")
-
 
 # ---------------------------------------------------------------------------
 # Real DistilBERT model

@@ -42,7 +42,7 @@ def _build_strip_patterns(fields: Iterable[str]) -> list[re.Pattern[str]]:
         # Anchor on the tag, then eat non-/-prefixed text until the
         # next field tag or end of string.
         pat = re.compile(
-            rf"(?:^|\s)/{re.escape(tag.lstrip('/'))}\b[^\S\r\n]*(?:(?!\s*/[A-Z]{{2,3}}\b).)*",
+            rf"/{re.escape(tag.lstrip('/'))}.*?(?=\s*/[A-Z]{{2,3}}\b|$)",
             re.IGNORECASE | re.DOTALL,
         )
         patterns.append(pat)

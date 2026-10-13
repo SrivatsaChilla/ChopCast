@@ -34,6 +34,9 @@ from chopcast.logging import get_logger
 from chopcast.parser.pirep import parse_pirep
 from chopcast.processing.cleaner import clean_text
 from chopcast.processing.features import FeatureRow, altitude_band
+from chopcast.weather.matcher import WeatherMatcher
+
+log = get_logger(__name__)
 
 log = get_logger(__name__)
 
@@ -81,6 +84,7 @@ class PipelineDeps:
 
     config: ProcessingConfig
     rules: LabelingRules
+    weather_matcher: WeatherMatcher | None = None
 
 
 def _parse_obs_time(value: str | None) -> datetime | None:
@@ -152,6 +156,15 @@ def process(
     aircraft = parsed.aircraft_type or raw.aircraft
     report_type = raw.report_type or "PIREP"
 
+    # Weather Fusion Injection
+    weather = None
+    if deps.weather_matcher and raw.lat is not None and raw.lon is not None:
+        # In a real scenario, observations are fetched/passed in from the orchestrator
+        # For now, we pass an empty list to allow the infrastructure to be in place.
+        weather = deps.weather_matcher.find_nearest(
+            raw.lat, raw.lon, raw.obs_time, []
+        )
+
     return FeatureRow(
         hash=raw.hash,
         obs_time=obs_dt,
@@ -164,6 +177,7 @@ def process(
         severity_label=label,
         hour_of_day=obs_dt.hour,
         day_of_year=obs_dt.timetuple().tm_yday,
+        weather=weather,
     )
 
 
