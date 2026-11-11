@@ -145,16 +145,31 @@ class HttpAwcClient:
 
     @staticmethod
     def _decode(content: bytes) -> pd.DataFrame | None:
-        """Decode the gzipped CSV. An empty body means no data, like a 204."""
+        """Decode the gzipped CSV. An empty body means no data, like a 204.
+
+        Lines with too many fields are kept out of the frame but returned in
+        `df.attrs["malformed_lines"]` so the service can quarantine them.
+        """
         if not content:
             log.warning("collector.fetch.empty_body", bytes=0)
             return None
+        malformed: list[list[str]] = []
+
+        def keep_bad_line(fields: list[str]) -> None:
+            malformed.append(fields)
+            return None  # drop it from the frame
+
         with gzip.open(io.BytesIO(content), "rt", errors="replace", encoding="utf-8") as fh:
             try:
-                return pd.read_csv(fh, low_memory=False, on_bad_lines="skip")
+                # A callable on_bad_lines needs the python engine; ~2k rows, so speed is fine.
+                df = pd.read_csv(fh, engine="python", on_bad_lines=keep_bad_line)
             except pd.errors.EmptyDataError:
                 log.warning("collector.fetch.empty_body", bytes=len(content))
                 return None
+        if malformed:
+            log.warning("collector.fetch.malformed_lines", count=len(malformed))
+        df.attrs["malformed_lines"] = malformed
+        return df
 
 
 __all__ = ["AwcClient", "HttpAwcClient"]

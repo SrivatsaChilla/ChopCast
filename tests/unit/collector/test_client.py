@@ -179,3 +179,18 @@ def test_raises_http_error_on_truncated_gzip() -> None:
     )
     with pytest.raises(HttpError, match="undecodable"):
         _client().fetch_aircraft_reports()
+
+
+@responses.activate
+def test_malformed_lines_are_kept_not_dropped() -> None:
+    csv = "raw_text,latitude\nUA /OV SFO,37.6\nUA /OV LAX,33.9,EXTRA\nUA /OV DEN,39.8\n"
+    responses.add(
+        responses.GET,
+        "https://example.test/cache.csv.gz",
+        body=_gzipped_csv(csv),
+        status=200,
+    )
+    df = _client().fetch_aircraft_reports()
+    assert df is not None
+    assert list(df["raw_text"]) == ["UA /OV SFO", "UA /OV DEN"]
+    assert df.attrs["malformed_lines"] == [["UA /OV LAX", "33.9", "EXTRA"]]
