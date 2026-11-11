@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
+from dotenv import dotenv_values
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -342,7 +343,8 @@ class Settings(BaseSettings):
         Order of resolution:
             1. `configs/default.yaml`
             2. `configs/<profile>.yaml` (selected by profile arg or env)
-            3. `CHOPCAST_*` environment variables
+            3. `CHOPCAST_*` from `./.env`, then the process environment
+               (the environment wins)
             4. `${paths.root}` references are expanded after step 3 so that
                an env override of `paths.root` flows into all path strings.
 
@@ -489,7 +491,10 @@ def _env_overlay(*, prefix: str) -> dict[str, Any]:
     merge step (`_deep_merge` only adds keys the overlay already has).
     """
     out: dict[str, Any] = {}
-    for env_key, env_value in os.environ.items():
+    sources = {**dotenv_values(".env"), **os.environ}
+    for env_key, env_value in sources.items():
+        if env_value is None:
+            continue
         if not env_key.startswith(prefix):
             continue
         body = env_key[len(prefix):]
