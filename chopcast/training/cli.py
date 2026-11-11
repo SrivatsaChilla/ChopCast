@@ -1,6 +1,7 @@
 """CLI for the trainer.
 
 Commands:
+  features [--labeled-only]                build a feature dataset from the raw DB
   baseline [--dataset PATH] [--register]   train the TF-IDF baseline
   split    [--dataset PATH]                show the split without training
   datasets                                 list available feature datasets
@@ -12,6 +13,7 @@ traceback.
 
 from __future__ import annotations
 
+import sqlite3
 import sys
 from pathlib import Path
 from typing import NoReturn
@@ -19,6 +21,7 @@ from typing import NoReturn
 import click
 
 from chopcast.config import Settings
+from chopcast.data.feature_store import FeatureStoreConfig, build_dataset
 from chopcast.errors import ChopcastError
 from chopcast.logging import configure as configure_logging
 from chopcast.logging import get_logger
@@ -65,6 +68,48 @@ def _resolve_dataset(settings: Settings, dataset: str | None) -> Path:
 @click.group(name="chopcast-train", help="Train turbulence-severity models.")
 def cli() -> None:
     pass
+
+
+@cli.command("features", help="Build a feature dataset from the pilot reports in the raw DB.")
+@click.option(
+    "--labeled-only",
+    is_flag=True,
+    help="Only reports with a turbulence field (the `trainable` view), "
+    "instead of every pilot report (`pireps`).",
+)
+@click.option("-v", "--verbose", is_flag=True)
+def features(labeled_only: bool, verbose: bool) -> None:
+    settings = _build_settings(verbose)
+    paths = settings.to_paths()
+    view = "trainable" if labeled_only else "pireps"
+    try:
+        conn = sqlite3.connect(f"file:{paths.raw_db_path}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        rows = (
+            dict(r)
+            for r in conn.execute(
+                "SELECT hash, obs_time, raw_text, report_type, aircraft, lat, lon, altitude "
+                f"FROM pireps WHERE hash IN (SELECT hash FROM {view}) ORDER BY obs_time"
+            )
+        )
+        result = build_dataset(
+            rows,
+            FeatureStoreConfig(
+                processing=settings.processing,
+                labeling=settings.labeling,
+                output_dir=paths.features_dir_path,
+                path_root=paths.root,
+                salt=view,  # keeps the two sources from overwriting each other
+            ),
+        )
+        conn.close()
+    except (ChopcastError, sqlite3.Error) as e:
+        _fail(f"{type(e).__name__}: {e}", e, verbose)
+
+    click.echo(f"source         : {view}")
+    click.echo(f"rows written   : {result.rows_written:,}")
+    click.echo(f"rows rejected  : {result.rows_rejected:,}")
+    click.echo(f"dataset        : {result.output_path}")
 
 
 @cli.command("datasets", help="List feature datasets available to train on.")
