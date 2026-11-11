@@ -2,7 +2,7 @@
 # A change here is a content-breaking change that requires a new feature store version.
 # See docs/CONFIGURATION.md §4.1 and docs/ML_ARCHITECTURE.md §4.
 
-version: v1
+version: v2
 
 # Raw turbulence values that map to each severity class.
 # Matching is case-insensitive substring; longest match wins.
@@ -11,18 +11,33 @@ none:
   - "TB NIL"
   - "SMOOTH"
   - "NIL"
+  - "NONE"
+  - "SMTH"
+  - "NO TURB"
 
 light:
   - "LGT CHOP"
   - "LGT"
   - "LIGHT CHOP"
   - "LIGHT"
+  # Common pilot spellings seen in AWC data. Bare "LT" is left out on purpose:
+  # substring matching would also hit "ALT" and "FLT".
+  - "LT CHOP"
+  - "LT CHP"
+  - "LT TURB"
+  - "LT TB"
+  - "CONS LT"
+  - "OCNL LT"
+  - "CONT LT"
+  - "LGHT"
+  - "LHT"
 
 moderate:
   - "OCNL MOD"
   - "MOD CHOP"
   - "LGT-MOD"
   - "MOD"
+  - "MDT"
 
 severe:
   - "MOD-SEV"
