@@ -39,10 +39,16 @@ def _build_strip_patterns(fields: Iterable[str]) -> list[re.Pattern[str]]:
     """
     patterns: list[re.Pattern[str]] = []
     for tag in fields:
-        # Anchor on the tag, then eat non-/-prefixed text until the
-        # next field tag or end of string.
+        # Match the tag wherever it appears, then eat text until the next
+        # field tag or end of string.
+        #
+        # No whitespace is required before the tag: most real reports are
+        # written compact (`/TP B738/TB MOD`), and requiring a space left
+        # `/TB` in place for ~96% of labelled reports. The separator after
+        # the tag is not consumed either, so a doubled tag (`/TB /TB MOD`)
+        # still leaves whitespace for the second match.
         pat = re.compile(
-            rf"(?:^|\s)/{re.escape(tag.lstrip('/'))}\b[^\S\r\n]*(?:(?!\s*/[A-Z]{{2,3}}\b).)*",
+            rf"\s*/{re.escape(tag.lstrip('/'))}\b(?:(?!\s*/[A-Z]{{2,3}}\b).)*",
             re.IGNORECASE | re.DOTALL,
         )
         patterns.append(pat)

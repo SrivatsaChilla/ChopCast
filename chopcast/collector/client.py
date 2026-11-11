@@ -14,6 +14,7 @@ from __future__ import annotations
 import gzip
 import io
 import time
+import zlib
 from typing import Protocol, runtime_checkable
 
 import pandas as pd
@@ -105,7 +106,17 @@ class HttpAwcClient:
                     continue
 
                 resp.raise_for_status()
-                return self._decode(resp.content)
+                try:
+                    return self._decode(resp.content)
+                except (gzip.BadGzipFile, EOFError, zlib.error) as e:
+                    # A truncated or corrupt download. Surfacing it as an
+                    # HttpError lets the service record an `http_error` run
+                    # and poll again next cycle instead of crashing.
+                    raise HttpError(
+                        f"AWC returned an undecodable body: {e}",
+                        status=resp.status_code,
+                        url=self._url,
+                    ) from e
 
             except requests.RequestException as e:
                 last_error = e
@@ -133,9 +144,17 @@ class HttpAwcClient:
         )
 
     @staticmethod
-    def _decode(content: bytes) -> pd.DataFrame:
+    def _decode(content: bytes) -> pd.DataFrame | None:
+        """Decode the gzipped CSV. An empty body means no data, like a 204."""
+        if not content:
+            log.warning("collector.fetch.empty_body", bytes=0)
+            return None
         with gzip.open(io.BytesIO(content), "rt", errors="replace", encoding="utf-8") as fh:
-            return pd.read_csv(fh, low_memory=False, on_bad_lines="skip")
+            try:
+                return pd.read_csv(fh, low_memory=False, on_bad_lines="skip")
+            except pd.errors.EmptyDataError:
+                log.warning("collector.fetch.empty_body", bytes=len(content))
+                return None
 
 
 __all__ = ["AwcClient", "HttpAwcClient"]
