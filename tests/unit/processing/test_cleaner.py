@@ -82,3 +82,15 @@ def test_strips_doubled_tb_tag(cfg: CleanerConfig) -> None:
     assert "/tb" not in out
     assert "mod" not in out
     assert "e170" in out
+
+
+def test_remarks_severity_words_stripped_when_not_preserved() -> None:
+    cfg = CleanerConfig(preserve_remarks_tb_mentions=False)
+    out = clean_text("UA /OV SFO/TP B738/TB LGT/RM LIGHT TURB, MOSTLY SMOOTH OCNL CHOP ZME", cfg)
+    assert out == "ua /ov sfo/tp b738 /rm , mostly zme"
+
+
+def test_severity_words_outside_remarks_are_untouched() -> None:
+    cfg = CleanerConfig(preserve_remarks_tb_mentions=False)
+    out = clean_text("UA /OV MOD 090020/TP B738/RM SMOOTH", cfg)
+    assert out == "ua /ov mod 090020/tp b738/rm"

@@ -55,6 +55,20 @@ def _build_strip_patterns(fields: Iterable[str]) -> list[re.Pattern[str]]:
     return patterns
 
 
+# Pilots restate severity in free-text remarks (`/RM SMOOTH`, `/RM LIGHT TURB`),
+# which leaks the label past the /TB strip. See issue #3.
+_REMARKS_RE = re.compile(r"/RM\b(?:(?!\s*/[A-Z]{2,3}\b).)*", re.IGNORECASE | re.DOTALL)
+_SEVERITY_WORDS_RE = re.compile(
+    r"\b(?:NEG|SMOOTH|CALM|LGT|LIGHT|MOD|MODERATE|SEV|SEVERE|EXTM|EXTREME|"
+    r"CHOP\w*|ROUGH|BUMP\w*|TURB\w*|OCNL|INTMT|CONS)\b",
+    re.IGNORECASE,
+)
+
+
+def _strip_remarks_severity(text: str) -> str:
+    return _REMARKS_RE.sub(lambda m: _SEVERITY_WORDS_RE.sub("", m.group(0)), text)
+
+
 def _collapse_ws(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
@@ -73,6 +87,8 @@ def clean_text(raw_text: str, config: CleanerConfig) -> str:
     # Step 1: drop each configured field block.
     for pat in _build_strip_patterns(config.strip_fields):
         text = pat.sub(" ", text)
+    if not config.preserve_remarks_tb_mentions:
+        text = _strip_remarks_severity(text)
 
     # Step 2: optional lowercase. We default to True because TF-IDF and
     # most transformer tokenisers are case-insensitive, and lowercasing
