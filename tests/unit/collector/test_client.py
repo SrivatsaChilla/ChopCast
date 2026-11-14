@@ -120,3 +120,77 @@ def test_raises_http_error_after_server_errors() -> None:
         client.fetch_aircraft_reports()
     assert e.value.status == 503
     assert e.value.url == "https://example.test/cache.csv.gz"
+
+
+# ---------------------------------------------------------------------------
+# Empty and undecodable bodies. AWC has served both; before this, either one
+# raised out of `_decode` and killed the collector process.
+# ---------------------------------------------------------------------------
+def _client() -> HttpAwcClient:
+    return HttpAwcClient(
+        url="https://example.test/cache.csv.gz",
+        user_agent="test/1.0",
+        max_retries=1,
+    )
+
+
+@responses.activate
+def test_returns_none_on_gzipped_empty_body() -> None:
+    responses.add(
+        responses.GET,
+        "https://example.test/cache.csv.gz",
+        body=_gzipped_csv(""),
+        status=200,
+    )
+    assert _client().fetch_aircraft_reports() is None
+
+
+@responses.activate
+def test_returns_none_on_zero_byte_body() -> None:
+    responses.add(
+        responses.GET,
+        "https://example.test/cache.csv.gz",
+        body=b"",
+        status=200,
+    )
+    assert _client().fetch_aircraft_reports() is None
+
+
+@responses.activate
+def test_raises_http_error_on_corrupt_gzip() -> None:
+    responses.add(
+        responses.GET,
+        "https://example.test/cache.csv.gz",
+        body=b"this is not gzip",
+        status=200,
+    )
+    with pytest.raises(HttpError, match="undecodable"):
+        _client().fetch_aircraft_reports()
+
+
+@responses.activate
+def test_raises_http_error_on_truncated_gzip() -> None:
+    full = _gzipped_csv("rawOb,obsTime,lat\nUA,2026-08-22T17:00:00Z,37.5\n")
+    responses.add(
+        responses.GET,
+        "https://example.test/cache.csv.gz",
+        body=full[: len(full) // 2],
+        status=200,
+    )
+    with pytest.raises(HttpError, match="undecodable"):
+        _client().fetch_aircraft_reports()
+
+
+@responses.activate
+def test_malformed_lines_are_kept_not_dropped() -> None:
+    csv = "raw_text,latitude\nUA /OV SFO,37.6\nUA /OV LAX,33.9,EXTRA\nUA /OV DEN,39.8\n"
+    responses.add(
+        responses.GET,
+        "https://example.test/cache.csv.gz",
+        body=_gzipped_csv(csv),
+        status=200,
+    )
+    df = _client().fetch_aircraft_reports()
+    assert df is not None
+    assert list(df["raw_text"]) == ["UA /OV SFO", "UA /OV DEN"]
+    assert df.attrs["malformed_lines"] == [["UA /OV LAX", "33.9", "EXTRA"]]

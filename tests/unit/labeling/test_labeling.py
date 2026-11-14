@@ -97,3 +97,18 @@ def test_load_rules_invalid_combination_strategy(tmp_path: Path) -> None:
     bad.write_text("version: v1\ncombination_strategy: nonsense\nnone:\n  - NEG\n")
     with pytest.raises(LabelingError, match="combination_strategy"):
         load_rules(bad)
+
+@pytest.mark.parametrize(
+    ("raw", "want"),
+    [
+        ("LT CHOP", "Light"),
+        ("CONT LT CHOP", "Light"),
+        ("LT TURB", "Light"),
+        ("LGHT CHOP", "Light"),
+        ("MDT TURB", "Moderate"),
+        ("SMTH", "None"),
+        ("NO TURB", "None"),
+    ],
+)
+def test_common_pilot_spellings(rules: object, raw: str, want: str) -> None:
+    assert map_to_severity(raw, rules) == want

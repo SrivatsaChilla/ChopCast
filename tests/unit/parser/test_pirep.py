@@ -90,3 +90,18 @@ def test_case_insensitive_keys() -> None:
     fields = parse_pirep("ua /ov sfo /tm 1425 /tb mod")
     assert fields.location == "sfo"
     assert fields.turbulence == "mod"
+
+def test_compact_pirep_parses_all_fields() -> None:
+    # Most real AWC reports have no space before each slash field.
+    fields = parse_pirep("DEN UA /OV DEN090020/TM 1425/FL350/TP B738/TB LGT-MOD CHOP/RM SMOOTH ABV")
+    assert fields.location == "DEN090020"
+    assert fields.flight_level == 35000
+    assert fields.aircraft_type == "B738"
+    assert fields.turbulence == "LGT-MOD CHOP"
+    assert fields.remarks == "SMOOTH ABV"
+
+
+def test_compact_slash_inside_a_value_is_not_a_field() -> None:
+    fields = parse_pirep("UA /OV SFO/TP B738/SK BKN030/OVC050/TB NEG")
+    assert fields.sky_conditions == "BKN030/OVC050"
+    assert fields.turbulence == "NEG"

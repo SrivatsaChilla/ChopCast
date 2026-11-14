@@ -70,6 +70,15 @@ class LeakageError(ChopcastError):
     """Label leakage was detected (e.g., /TB appeared in a cleaned string)."""
 
 
+class TrainingError(ChopcastError):
+    """Raised when a training run cannot proceed.
+
+    Covers an empty or unreadable dataset, a split that would leave a
+    class entirely absent from training, and a model artifact that
+    cannot be written.
+    """
+
+
 __all__ = [
     "ChopcastError",
     "ConfigError",
@@ -78,6 +87,7 @@ __all__ = [
     "HttpError",
     "LabelingError",
     "LeakageError",
+    "TrainingError",
     "ModelNotFound",
     "ParseError",
     "RateLimited",

@@ -71,6 +71,14 @@ _FIELD_KEYS: tuple[str, ...] = (
 )
 
 # Time: HHMM or HHMMSS, with optional Z suffix.
+# A field starts at any slash after whitespace, or at a known key glued to
+# the previous value (`/TP B738/TB MOD`, the usual AWC form). The (?![A-Z])
+# keeps values like `BKN030/OVC050` from splitting on `/OV`; /FL is exempt
+# because its glued values are letters too (`/FLUNKN`, `/FLDURD`).
+_FIELD_SPLIT_RE = re.compile(
+    r"\s+(?=/)|\s*(?=/(?:FL|(?:OV|TM|TP|TB|SK|WX|TA|IC|RM)(?![A-Z])))",
+    re.IGNORECASE,
+)
 _TIME_RE = re.compile(r"^(?P<h>\d{2})(?P<m>\d{2})(?P<s>\d{2})?Z?$")
 
 # /OV: may be a 3-letter navaid, a 4-letter airport ICAO, or a 4-char
@@ -112,7 +120,7 @@ def _tokenize(raw: str) -> list[str]:
     tail = parts[1] if len(parts) > 1 else ""
     out: list[str] = [head]
     if tail:
-        for chunk in re.split(r"\s+/", tail):
+        for chunk in _FIELD_SPLIT_RE.split(tail):
             chunk = chunk.strip()
             if not chunk:
                 continue

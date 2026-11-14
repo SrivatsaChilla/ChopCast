@@ -177,3 +177,15 @@ def test_run_is_recorded_in_runs_table(store: SqliteReportStore, synthetic_batch
     assert len(runs) == 1
     assert runs[0].status == "ok"
     assert runs[0].rows_inserted == 5
+
+
+def test_malformed_csv_lines_are_counted_as_rejected(store: SqliteReportStore) -> None:
+    df = pd.DataFrame([{"rawOb": "UA /OV SFO", "obsTime": "2026-08-22T17:00:00Z"}])
+    df.attrs["malformed_lines"] = [["UA /OV LAX", "33.9", "EXTRA"]]
+    result = _service(store, df).run_once()
+    assert result.rows_inserted == 1
+    assert result.rows_rejected == 1
+    assert result.rows_seen == 2
+    reason, raw = store._conn.execute("SELECT reason, raw_row FROM rejected").fetchone()
+    assert reason == "malformed_csv"
+    assert "EXTRA" in raw

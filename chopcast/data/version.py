@@ -54,6 +54,7 @@ def derive_version(config: ProcessingConfig, *, salt: str = "") -> DatasetVersio
         f"{tuple(config.cleaner.strip_fields)}|"
         f"{config.cleaner.lowercase}|"
         f"{config.cleaner.collapse_whitespace}|"
+        f"{config.cleaner.preserve_remarks_tb_mentions}|"
         f"{tuple(config.features.altitude_bands)}|"
         f"{salt}"
     ).encode("utf-8")

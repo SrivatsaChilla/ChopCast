@@ -198,6 +198,16 @@ class DefaultCollectionService:
         inserted = 0
         skipped = 0
         rejected = 0
+        malformed = df.attrs.get("malformed_lines", [])
+        for fields in malformed:
+            self.store.insert_rejected(
+                fetched_at=started_at,
+                reason="malformed_csv",
+                raw_row={"fields": fields},
+                source_url=source_url,
+                detail=f"{len(fields)} fields, expected {len(df.columns)}",
+            )
+            rejected += 1
         for _, row in norm.iterrows():
             verdict = self.validator.validate(row) if self.validator else Verdict(ok=True)
             if not verdict.ok:
@@ -262,7 +272,7 @@ class DefaultCollectionService:
             run_id,
             finished_at=finished_at,
             status="ok",
-            rows_seen=len(df),
+            rows_seen=len(df) + len(malformed),
             rows_inserted=inserted,
             rows_skipped=skipped,
             rows_rejected=rejected,
@@ -270,7 +280,7 @@ class DefaultCollectionService:
         result = RunResult(
             run_id=run_id,
             status="ok",
-            rows_seen=len(df),
+            rows_seen=len(df) + len(malformed),
             rows_inserted=inserted,
             rows_skipped=skipped,
             rows_rejected=rejected,

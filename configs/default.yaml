@@ -42,9 +42,9 @@ database:
     destination: "${paths.backups_dir}"
 
 processing:
-  parser_version: "v1"
-  labeler_version: "v1"
-  cleaner_version: "v1"
+  parser_version: "v2"
+  labeler_version: "v2"
+  cleaner_version: "v2"
   feature_builder_version: "v1"
   cleaner:
     strip_fields: ["/TB"]

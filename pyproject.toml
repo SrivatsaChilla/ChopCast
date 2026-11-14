@@ -21,6 +21,7 @@ dependencies = [
     "requests>=2.31,<3",
     "pydantic>=2.5,<3",
     "pydantic-settings>=2.1,<3",
+    "python-dotenv>=1.0,<2",
     "PyYAML>=6.0,<7",
     "structlog>=24.1,<25",
     "click>=8.1,<9",
@@ -163,6 +164,11 @@ filterwarnings = [
     "error",
     "ignore::DeprecationWarning:botocore.*",
     "ignore::DeprecationWarning:dateutil.*",
+    # joblib 1.5.3 sets `array.shape` while unpickling, which NumPy 2.5
+    # deprecated. It is a warning from a dependency, not a failure: the
+    # round trip succeeds and predictions match. TODO: remove once joblib
+    # ships a NumPy 2.5-clean release.
+    "ignore::DeprecationWarning:joblib.*",
 ]
 
 # ---------------------------------------------------------------------------

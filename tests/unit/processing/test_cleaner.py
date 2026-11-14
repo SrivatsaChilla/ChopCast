@@ -54,3 +54,43 @@ def test_handles_multiple_tb_blocks(cfg: CleanerConfig) -> None:
     assert "/TB" not in out
     assert "MOD" not in out
     assert "SEV" not in out
+
+# ---------------------------------------------------------------------------
+# Compact reports. Most real PIREPs glue each field to the previous value
+# with no space (`/TP B738/TB MOD`). The strip pattern used to require
+# whitespace before `/TB`, so 96% of labelled reports raised LeakageError.
+# ---------------------------------------------------------------------------
+def test_strips_tb_glued_to_previous_field(cfg: CleanerConfig) -> None:
+    out = clean_text("DEN UA /OV DEN270030/TM 0130/FL130/TP B737/TB MOD/RM SMOOTH", cfg)
+    assert "/tb" not in out
+    assert "mod" not in out
+    assert "b737" in out  # the field before /TB is kept
+    assert "/rm smooth" in out  # the field after /TB is kept
+
+
+def test_strips_tb_glued_at_end_of_report(cfg: CleanerConfig) -> None:
+    out = clean_text(
+        "LOZ UA /OV LOZ360020/TM 2349/FL340/TP B738/TB CONS LGT CHOP OCNL MOD CHOP", cfg
+    )
+    assert "/tb" not in out
+    assert "chop" not in out
+    assert "b738" in out
+
+
+def test_strips_doubled_tb_tag(cfg: CleanerConfig) -> None:
+    out = clean_text("BNA UA /OV BNA330030/TM 1411/FL130/TP E170/TB /TB MOD 130-080 DURD", cfg)
+    assert "/tb" not in out
+    assert "mod" not in out
+    assert "e170" in out
+
+
+def test_remarks_severity_words_stripped_when_not_preserved() -> None:
+    cfg = CleanerConfig(preserve_remarks_tb_mentions=False)
+    out = clean_text("UA /OV SFO/TP B738/TB LGT/RM LIGHT TURB, MOSTLY SMOOTH OCNL CHOP ZME", cfg)
+    assert out == "ua /ov sfo/tp b738 /rm , mostly zme"
+
+
+def test_severity_words_outside_remarks_are_untouched() -> None:
+    cfg = CleanerConfig(preserve_remarks_tb_mentions=False)
+    out = clean_text("UA /OV MOD 090020/TP B738/RM SMOOTH", cfg)
+    assert out == "ua /ov mod 090020/tp b738/rm"

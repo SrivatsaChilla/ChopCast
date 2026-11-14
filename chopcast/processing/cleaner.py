@@ -39,14 +39,34 @@ def _build_strip_patterns(fields: Iterable[str]) -> list[re.Pattern[str]]:
     """
     patterns: list[re.Pattern[str]] = []
     for tag in fields:
-        # Anchor on the tag, then eat non-/-prefixed text until the
-        # next field tag or end of string.
+        # Match the tag wherever it appears, then eat text until the next
+        # field tag or end of string.
+        #
+        # No whitespace is required before the tag: most real reports are
+        # written compact (`/TP B738/TB MOD`), and requiring a space left
+        # `/TB` in place for ~96% of labelled reports. The separator after
+        # the tag is not consumed either, so a doubled tag (`/TB /TB MOD`)
+        # still leaves whitespace for the second match.
         pat = re.compile(
-            rf"(?:^|\s)/{re.escape(tag.lstrip('/'))}\b[^\S\r\n]*(?:(?!\s*/[A-Z]{{2,3}}\b).)*",
+            rf"\s*/{re.escape(tag.lstrip('/'))}\b(?:(?!\s*/[A-Z]{{2,3}}\b).)*",
             re.IGNORECASE | re.DOTALL,
         )
         patterns.append(pat)
     return patterns
+
+
+# Pilots restate severity in free-text remarks (`/RM SMOOTH`, `/RM LIGHT TURB`),
+# which leaks the label past the /TB strip. See issue #3.
+_REMARKS_RE = re.compile(r"/RM\b(?:(?!\s*/[A-Z]{2,3}\b).)*", re.IGNORECASE | re.DOTALL)
+_SEVERITY_WORDS_RE = re.compile(
+    r"\b(?:NEG|SMOOTH|CALM|LGT|LIGHT|MOD|MODERATE|SEV|SEVERE|EXTM|EXTREME|"
+    r"CHOP\w*|ROUGH|BUMP\w*|TURB\w*|OCNL|INTMT|CONS)\b",
+    re.IGNORECASE,
+)
+
+
+def _strip_remarks_severity(text: str) -> str:
+    return _REMARKS_RE.sub(lambda m: _SEVERITY_WORDS_RE.sub("", m.group(0)), text)
 
 
 def _collapse_ws(text: str) -> str:
@@ -67,6 +87,8 @@ def clean_text(raw_text: str, config: CleanerConfig) -> str:
     # Step 1: drop each configured field block.
     for pat in _build_strip_patterns(config.strip_fields):
         text = pat.sub(" ", text)
+    if not config.preserve_remarks_tb_mentions:
+        text = _strip_remarks_severity(text)
 
     # Step 2: optional lowercase. We default to True because TF-IDF and
     # most transformer tokenisers are case-insensitive, and lowercasing
