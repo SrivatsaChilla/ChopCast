@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chopcast-dashboard"
+version = "0.1.0"
+description = "Read-only Django dashboard for the ChopCast pipeline"
+requires-python = ">=3.11"
+dependencies = [
+    "Django>=5.2,<5.3",
+    "PyYAML>=6.0,<7",
+    "Markdown>=3.6,<4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<10",
+    "pytest-django>=4.8,<5",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["config*", "adapters*", "apps*"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers"]
+markers = [
+    "integration: read-only checks against a real pipeline checkout",
+]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:django.*",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["adapters", "apps", "config", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]

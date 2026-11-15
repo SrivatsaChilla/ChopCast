@@ -1,0 +1,4 @@
+{"hash": "d19f48f3f35a74c08614debd9d6164577c2feb6caa67a2669b32744118bd9af4", "feature_version": "features_v1", "label": null, "vector": [0, 0.0, 0]}
+{"hash": "9ac7d8b0cc4c96ad990c9aee9978fdfbf6fd232515992e207d26066b39497bf1", "feature_version": "features_v1", "label": "NEG", "vector": [1, 0.5, -1]}
+{"hash": "8d5058ad961d382017b1a711206dd0877382ec9f6527e3e46d3ce20be543c1d3", "feature_version": "features_v1", "label": "LGT", "vector": [2, 1.0, -2]}
+{"hash": "0438759a54686aa89d9e5e24668080c2db3e15a7e2837ecabdaaec1da2a4cda7", "feature_version": "features_v1", "label": "MOD", "vector": [3, 1.5, -3]}

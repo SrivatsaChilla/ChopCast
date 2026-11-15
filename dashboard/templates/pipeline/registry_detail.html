@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% load dashboard_tags %}
+{% block content %}
+<div class="page-actions">
+  <a href="{% url 'pipeline:registry' %}">← Registry</a>
+  <a class="button ghost" href="{% url 'pipeline:evaluation_detail' model.id %}">Evaluation</a>
+  <a class="button ghost" href="{% url 'pipeline:training' %}">Training runs</a>
+</div>
+
+{% if model.warnings %}
+<section class="banner-stack">{% for warning in model.warnings %}<div class="banner warning">{{ warning }}</div>{% endfor %}</section>
+{% endif %}
+
+<section class="section">
+  <div class="section-head"><h2>{{ model.model_version }}</h2><span class="badge state-info">id {{ model.id }}</span></div>
+  <dl class="facts panel">
+    <dt>Stored kind</dt><dd>{{ model.model_kind|default:"—" }}</dd>
+    <dt>Feature version</dt><dd>{{ model.feature_version|default:"—" }}</dd>
+    <dt>Registered at</dt><dd class="mono small">{{ model.registered_at|default:"—" }}</dd>
+    <dt>Promotions</dt><dd>{% for tag in model.promotions %}<span class="badge state-ok">{{ tag }}</span>{% empty %}<span class="muted">none</span>{% endfor %}</dd>
+    <dt>Artifact path</dt><dd class="mono small wrap">{{ model.artifact_path|default:"—" }}</dd>
+    <dt>Resolved</dt><dd class="mono small wrap">{{ model.artifact_resolved|default:"not found" }}</dd>
+    <dt>Exists</dt><dd>{{ model.artifact_exists|yesno_icon }}</dd>
+    <dt>Notes</dt><dd>{{ model.notes|default:"—" }}</dd>
+  </dl>
+</section>
+
+<div class="two-col">
+  <section class="section">
+    <div class="section-head"><h2>Metrics</h2><span class="muted">registry metrics_json</span></div>
+    {% if model.metrics %}
+      <div class="metric-grid compact">
+        {% for key, value in model.metrics.items %}{% if key != "per_class" and key != "confusion" %}{% include "partials/metric_card.html" with label=key value=value|metric %}{% endif %}{% endfor %}
+      </div>
+      {% include "partials/json_viewer.html" with title="Full metrics JSON" value=model.metrics %}
+    {% else %}
+      {% include "partials/empty_state.html" with title="No metrics stored" message="The registry row has no metrics_json." %}
+    {% endif %}
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2>Promotions</h2><span class="muted">this model only</span></div>
+    {% if model_promotions %}
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Promotions for this model</caption>
+        <thead><tr><th scope="col">Tag</th><th scope="col">Promoted at</th><th scope="col">Replaced</th></tr></thead>
+        <tbody>{% for promotion in model_promotions %}<tr><td><span class="badge state-ok">{{ promotion.tag }}</span></td><td class="mono small">{{ promotion.promoted_at|slice:19 }}</td><td class="num">{{ promotion.replaced_id|default:"—" }}</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+    {% else %}
+      {% include "partials/empty_state.html" with title="No promotions" message="This model has never been promoted." %}
+    {% endif %}
+  </section>
+</div>
+
+<div class="two-col">
+  <section class="section">
+    <div class="section-head"><h2>Artifact files</h2><span class="muted">{{ files|length }} recognised</span></div>
+    {% if files %}
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Artifact files</caption>
+        <thead><tr><th scope="col">Name</th><th scope="col" class="num">Size</th><th scope="col">Modified</th></tr></thead>
+        <tbody>{% for file in files %}<tr><td class="mono">{{ file.name }}</td><td class="num">{{ file.size|human_bytes }}</td><td class="mono small">{{ file.mtime|slice:19 }}</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+    {% else %}
+      {% include "partials/empty_state.html" with title="Artifact missing" message="No recognized artifact files were found at the resolved path." issues="ISS-007" %}
+    {% endif %}
+  </section>
+  <section class="section">
+    <div class="section-head"><h2>Manifest</h2><span class="muted">manifest.txt</span></div>
+    {% if manifest %}
+      <dl class="facts panel">{% for key, value in manifest.items %}<dt class="mono">{{ key }}</dt><dd class="mono">{{ value }}</dd>{% endfor %}</dl>
+    {% else %}
+      {% include "partials/empty_state.html" with title="No manifest" message="No manifest.txt was found." %}
+    {% endif %}
+  </section>
+</div>
+
+{% if evaluation.data %}
+<section class="section">
+  <div class="section-head"><h2>Evaluation snapshot</h2><a href="{% url 'pipeline:evaluation_detail' model.id %}">Full evaluation →</a></div>
+  <div class="metric-grid compact">
+    {% for key, value in evaluation.data.metrics.items %}{% if key != "per_class" and key != "confusion" %}{% include "partials/metric_card.html" with label=key value=value|metric %}{% endif %}{% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

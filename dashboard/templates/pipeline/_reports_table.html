@@ -1,0 +1,37 @@
+{% load dashboard_tags %}
+{% if rows %}
+<div class="table-wrap">
+  <table class="data-table">
+    <caption class="sr-only">Reports</caption>
+    <thead>
+      <tr>
+        <th scope="col"><a href="{% sort_link 'hash' %}">Hash {% sort_arrow 'hash' %}</a></th>
+        <th scope="col"><a href="{% sort_link 'obs_time' %}">Observed {% sort_arrow 'obs_time' %}</a></th>
+        <th scope="col"><a href="{% sort_link 'report_type' %}">Type {% sort_arrow 'report_type' %}</a></th>
+        <th scope="col"><a href="{% sort_link 'turbulence' %}">Primary {% sort_arrow 'turbulence' %}</a></th>
+        <th scope="col"><a href="{% sort_link 'turbulence_2' %}">Secondary {% sort_arrow 'turbulence_2' %}</a></th>
+        <th scope="col" class="num"><a href="{% sort_link 'altitude' %}">Altitude {% sort_arrow 'altitude' %}</a></th>
+        <th scope="col"><a href="{% sort_link 'aircraft' %}">Aircraft {% sort_arrow 'aircraft' %}</a></th>
+        <th scope="col">Text</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td class="mono small"><a href="{% url 'pipeline:report_detail' row.hash %}" title="{{ row.hash }}">{{ row.hash|slice:12 }}…</a></td>
+        <td class="mono small">{{ row.obs_time|slice:19|default:"—" }}</td>
+        <td>{{ row.report_type|default:"—" }}</td>
+        <td>{% if row.turbulence %}<span class="badge {{ row.turbulence|severity_class }}">{{ row.turbulence }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td>{% if row.turbulence_2 %}<span class="badge {{ row.turbulence_2|severity_class }}">{{ row.turbulence_2 }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td class="num">{{ row.altitude|floatformat:0|default:"—" }}</td>
+        <td>{{ row.aircraft|default:"—" }}</td>
+        <td class="truncate" title="{{ row.raw_text }}">{{ row.raw_text|default:"(empty)"|truncatechars:90 }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if page_obj %}{% include "partials/pagination.html" %}{% endif %}
+{% else %}
+  {% include "partials/empty_state.html" with title="No matching reports" message="No rows match the current filters." hint="Try clearing the text search or the label layer." %}
+{% endif %}

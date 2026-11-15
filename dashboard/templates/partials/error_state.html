@@ -1,0 +1,7 @@
+<div class="error-state" role="alert">
+  <h3>{{ title|default:"This source could not be read" }}</h3>
+  {% if message %}<p>{{ message }}</p>{% endif %}
+  {% if path %}<p class="mono small">{{ path }}</p>{% endif %}
+  {% if issues %}<p class="issue-links">{% for issue in issues %}<a href="{% url 'core:issues' %}#{{ issue|lower }}">{{ issue }}</a>{% endfor %}</p>{% endif %}
+  <p class="muted">The rest of the page still renders. Check the path and environment variables on the <a href="{% url 'core:system' %}">System</a> page.</p>
+</div>

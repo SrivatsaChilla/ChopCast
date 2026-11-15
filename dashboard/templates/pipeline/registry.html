@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% load dashboard_tags %}
+{% block content %}
+
+{% if not current %}
+<div class="banner warning"><strong>No production model.</strong> The registry has {{ models|length }} model(s) but no promotion tagged <code>production</code>.</div>
+{% endif %}
+{% if profile.stray_raw_tables %}
+<div class="banner warning"><strong>Registry contains raw-data tables:</strong> <span class="mono">{{ profile.stray_raw_tables|join:", " }}</span>. <a href="{% url 'core:issues' %}#iss-005">ISS-005</a></div>
+{% endif %}
+
+<section class="section">
+  <div class="section-head">
+    <h2>Models</h2>
+    <span class="muted">{{ status.detail|default:"registry rows" }}</span>
+  </div>
+  {% if rows %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <caption class="sr-only">Registered models</caption>
+      <thead><tr><th scope="col">ID</th><th scope="col">Version</th><th scope="col">Stored kind</th><th scope="col">Feature</th><th scope="col">Registered</th><th scope="col">Promotions</th><th scope="col">Artifact</th><th scope="col">Exists</th><th scope="col" class="num">Files</th><th scope="col" class="num">Macro F1</th><th scope="col"></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="num">{{ row.model.id }}</td>
+          <td><strong>{{ row.model.model_version }}</strong></td>
+          <td>{{ row.model.model_kind|default:"—" }}</td>
+          <td>{{ row.model.feature_version|default:"—" }}</td>
+          <td class="mono small">{{ row.model.registered_at|slice:19|default:"—" }}</td>
+          <td>{% for tag in row.model.promotions %}<span class="badge state-ok">{{ tag }}</span>{% empty %}<span class="muted">none</span>{% endfor %}</td>
+          <td class="mono small wrap">{{ row.model.artifact_path|default:"—" }}{% if row.model.artifact_path and row.model.artifact_path|slice:1 != "/" and row.model.artifact_path|slice:1 != "\\" %}<span class="badge state-warning">relative</span>{% endif %}</td>
+          <td>{% if row.model.artifact_exists %}<span class="badge state-ok">present</span>{% else %}<span class="badge state-missing">missing</span>{% endif %}</td>
+          <td class="num">{{ row.files|length }}</td>
+          <td class="num">{{ row.model.metrics.macro_f1|metric }}</td>
+          <td><a href="{% url 'pipeline:registry_detail' row.model.id %}">Detail →</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    {% include "partials/empty_state.html" with title="No registry database found" message="No models were read from the configured registry path." hint=registry_path issues="ISS-005,ISS-007" %}
+  {% endif %}
+</section>
+
+<section class="section">
+  <div class="section-head"><h2>Promotions</h2><span class="muted">append-only history if present</span></div>
+  {% if promotions %}
+  <div class="table-wrap">
+    <table>
+      <caption class="sr-only">Promotions</caption>
+      <thead><tr><th scope="col">ID</th><th scope="col">Model</th><th scope="col">Tag</th><th scope="col">Promoted at</th><th scope="col">Replaced</th></tr></thead>
+      <tbody>
+        {% for promotion in promotions %}<tr><td class="num">{{ promotion.id }}</td><td><a href="{% url 'pipeline:registry_detail' promotion.model_id %}">{{ promotion.model_id }}</a></td><td><span class="badge state-ok">{{ promotion.tag }}</span></td><td class="mono small">{{ promotion.promoted_at|slice:19 }}</td><td class="num">{{ promotion.replaced_id|default:"—" }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    {% include "partials/empty_state.html" with title="No promotions" message="No model has been promoted to any tag." %}
+  {% endif %}
+</section>
+
+<section class="section">
+  <div class="section-head"><h2>Registry schema</h2><span class="muted">{{ profile.state|default:"unknown" }}</span></div>
+  <dl class="facts panel">
+    <dt>Path</dt><dd class="mono small wrap">{{ registry_path }}</dd>
+    <dt>Tables</dt><dd class="mono small">{{ profile.tables|join:", "|default:"—" }}</dd>
+    <dt>models table</dt><dd>{{ profile.has_models|yesno_icon }}</dd>
+    <dt>promotions table</dt><dd>{{ profile.has_promotions|yesno_icon }}</dd>
+    <dt>Stray raw tables</dt><dd class="mono small">{{ profile.stray_raw_tables|join:", "|default:"none" }}</dd>
+  </dl>
+</section>
+{% endblock %}

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section">
+  <div class="empty-state">
+    <span class="empty-icon" aria-hidden="true">404</span>
+    <h2>{{ page_title|default:"Not found" }}</h2>
+    <p>{{ message|default:"That page or record does not exist." }}</p>
+    <p><a class="button" href="{% url 'core:overview' %}">Back to overview</a></p>
+  </div>
+</section>
+{% endblock %}

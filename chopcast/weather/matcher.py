@@ -7,8 +7,8 @@ from chopcast.config import Settings
 from chopcast.weather.features import WeatherFeatures
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    \"\"\"Calculate the great circle distance between two points in kilometers.
-    \"\"\"
+    """Calculate the great circle distance between two points in kilometers.
+    """
     R = 6371.0  # Earth radius in km
     phi1, phi2 = np.radians(lat1), np.radians(lat2)
     dphi = np.radians(lat2 - lat1)
@@ -18,16 +18,17 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     return 2 * R * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
 
 class WeatherMatcher:
-    \"\"\"Spatial-temporal matcher for fusing PIREPs with METAR observations.
-    \"\"\"
+    """Spatial-temporal matcher for fusing PIREPs with METAR observations.
+    """
     def __init__(self, settings: Settings):
+
         self.settings = settings
         self.max_dist = settings.weather.metar.max_distance_km
         self.max_time = settings.weather.metar.max_time_delta_minutes
 
     def find_nearest(self, pirep_lat: float, pirep_lon: float, pirep_time: str, observations: list) -> Optional[WeatherFeatures]:
-        \"\"\"Find the closest METAR observation within spatial and temporal bounds.
-        \"\"\"
+        """Find the closest METAR observation within spatial and temporal bounds.
+        """
         import pandas as pd
 
         best_station = None

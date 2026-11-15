@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% load dashboard_tags %}
+{% block content %}
+<section class="section">
+  <div class="section-head"><h2>Compare models</h2><span class="muted">same persisted metrics, side by side</span></div>
+  <form class="filter-bar" method="get" action="{% url 'pipeline:evaluation_compare' %}">
+    <label>Model A
+      <select name="a">
+        {% for record in records %}<option value="{{ record.model_id }}"{% if a == record.model_id %} selected{% endif %}>{{ record.model_id }} · {{ record.model_version }}{% if not record.metrics %} (no metrics){% endif %}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Model B
+      <select name="b">
+        {% for record in records %}<option value="{{ record.model_id }}"{% if b == record.model_id %} selected{% endif %}>{{ record.model_id }} · {{ record.model_version }}{% if not record.metrics %} (no metrics){% endif %}</option>{% endfor %}
+      </select>
+    </label>
+    <div class="filter-actions"><button class="button" type="submit">Compare</button></div>
+  </form>
+</section>
+
+{% if comparison %}
+  {% if comparison.warnings %}
+  <section class="banner-stack">{% for warning in comparison.warnings %}<div class="banner warning">{{ warning }}</div>{% endfor %}</section>
+  {% endif %}
+  <section class="section">
+    <div class="section-head">
+      <h2>{{ comparison.a.model_version }} vs {{ comparison.b.model_version }}</h2>
+      <span class="muted">delta = B − A</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Metric comparison</caption>
+        <thead><tr><th scope="col">Field</th><th scope="col" class="num">{{ comparison.a.model_version }}</th><th scope="col" class="num">{{ comparison.b.model_version }}</th><th scope="col" class="num">Delta</th></tr></thead>
+        <tbody>
+          {% for field in comparison.fields %}
+          <tr><td class="mono">{{ field.name }}</td><td class="num">{{ field.a|metric }}</td><td class="num">{{ field.b|metric }}</td><td class="num {% if field.delta > 0 %}ok-text{% elif field.delta < 0 %}error-text{% endif %}">{{ field.delta|metric }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">No significance test is performed. Metrics come from stored artifacts; the dashboard does not re-run evaluation.</p>
+  </section>
+{% elif records %}
+  {% include "partials/empty_state.html" with title="Choose two models" message="Both selections must refer to models with persisted metrics." %}
+{% else %}
+  {% include "partials/empty_state.html" with title="Nothing to compare" message="No registry models were found." issues="ISS-087" %}
+{% endif %}
+{% endblock %}

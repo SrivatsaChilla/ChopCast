@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% load dashboard_tags %}
+{% block content %}
+<div class="page-actions">
+  <a href="{% url 'pipeline:evaluation' %}">← Evaluation</a>
+  <a class="button ghost" href="{% url 'pipeline:registry_detail' record.model_id %}">Registry record</a>
+  {% if previous %}<a class="button ghost" href="{% url 'pipeline:evaluation_compare' %}?a={{ previous.model_id }}&b={{ record.model_id }}">Compare with {{ previous.model_version }}</a>{% endif %}
+</div>
+
+{% if record.warnings %}
+<section class="banner-stack">{% for warning in record.warnings %}<div class="banner warning">{{ warning }}</div>{% endfor %}</section>
+{% endif %}
+
+<section class="section">
+  <div class="section-head"><h2>{{ record.model_version }}</h2><span class="badge state-info">source: {{ record.source }}</span></div>
+  <div class="metric-grid compact">
+    {% for key, value in numbers.items %}{% include "partials/metric_card.html" with label=key value=value|metric %}{% endfor %}
+  </div>
+  <dl class="facts panel">
+    <dt>Registry id</dt><dd>{{ record.model_id }}</dd>
+    <dt>Kind</dt><dd>{{ record.model_kind|default:"—" }}</dd>
+    <dt>Feature version</dt><dd>{{ record.feature_version|default:"—" }}</dd>
+    <dt>Registered</dt><dd class="mono small">{{ record.registered_at|default:"—" }}</dd>
+    <dt>Metric provenance</dt><dd>{{ record.source }}</dd>
+  </dl>
+</section>
+
+{% if classes %}
+<div class="two-col tight">
+  <section class="section">
+    <div class="section-head"><h2>Per-class</h2><span class="muted">support 0 is highlighted</span></div>
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Per-class metrics</caption>
+        <thead><tr><th scope="col">Class</th><th scope="col" class="num">Precision</th><th scope="col" class="num">Recall</th><th scope="col" class="num">F1</th><th scope="col" class="num">Support</th></tr></thead>
+        <tbody>
+          {% for row in classes %}<tr><td><span class="badge {{ row.label|severity_class }}">{{ row.label }}</span></td><td class="num">{{ row.precision|metric }}</td><td class="num">{{ row.recall|metric }}</td><td class="num">{{ row.f1|metric }}</td><td class="num">{% if row.support == 0 %}<span class="badge state-warning">0</span>{% else %}{{ row.support|default:"—" }}{% endif %}</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <section class="section">
+    <div class="section-head"><h2>Confusion</h2><span class="muted">rows = actual</span></div>
+    {% if matrix %}
+    <div class="table-wrap">
+      <table class="matrix">
+        <caption class="sr-only">Confusion matrix</caption>
+        <thead><tr><th scope="col">actual \ predicted</th>{% for label in matrix.labels %}<th scope="col">{{ label }}</th>{% endfor %}</tr></thead>
+        <tbody>{% for row in matrix_rows %}<tr><th scope="row">{{ row.label }}</th>{% for cell in row.cells %}<td class="num{% if cell.value %} has-value{% endif %}">{{ cell.value }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+      </table>
+    </div>
+    {% else %}<p class="muted">No confusion matrix in the metrics document.</p>{% endif %}
+  </section>
+</div>
+{% else %}
+  {% include "partials/empty_state.html" with title="No per-class metrics" message="The metrics document has no per_class block." issues="ISS-087" %}
+{% endif %}
+
+{% if comparison and previous %}
+<section class="section">
+  <div class="section-head"><h2>Change since {{ previous.model_version }}</h2><span class="muted">descriptive, not statistical</span></div>
+  <div class="table-wrap">
+    <table>
+      <caption class="sr-only">Metric diff against the previous model</caption>
+      <thead><tr><th scope="col">Metric</th><th scope="col" class="num">{{ previous.model_version }}</th><th scope="col" class="num">{{ record.model_version }}</th><th scope="col" class="num">Delta</th></tr></thead>
+      <tbody>
+        {% for field in comparison.fields %}<tr><td class="mono">{{ field.name }}</td><td class="num">{{ field.a|metric }}</td><td class="num">{{ field.b|metric }}</td><td class="num">{{ field.delta|metric }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

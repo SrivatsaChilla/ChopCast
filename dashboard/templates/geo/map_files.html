@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% load dashboard_tags %}
+{% block content %}
+<section class="section">
+  <div class="section-head">
+    <h2>Generated map files</h2>
+    <span class="muted">{{ status.detail|default:"configured roots" }}</span>
+    <a class="button ghost" href="{% url 'geo:maps' %}">Back to map</a>
+  </div>
+  <div class="banner info">
+    These are static HTML artifacts. The dashboard never creates or edits them. A generated folium file may load Leaflet and tiles from the internet (<a href="{% url 'core:issues' %}#iss-084">ISS-084</a>); the interactive dashboard map above does not.
+  </div>
+  {% if files %}
+  <div class="table-wrap">
+    <table>
+      <caption class="sr-only">Generated map HTML files</caption>
+      <thead><tr><th scope="col">File</th><th scope="col">Relative path</th><th scope="col" class="num">Size</th><th scope="col">Modified</th><th scope="col"></th></tr></thead>
+      <tbody>
+        {% for file in files %}
+        <tr>
+          <td class="mono">{{ file.name }}</td>
+          <td class="mono small wrap">{{ file.relative }}</td>
+          <td class="num">{{ file.size|human_bytes }}</td>
+          <td class="mono small">{{ file.mtime|slice:19 }}</td>
+          <td class="nowrap">
+            <a href="{% url 'geo:map_file' file.relative %}">View</a>
+            {% if allow_downloads %} · <a href="{% url 'geo:map_file' file.relative %}?download=1">Download</a>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    {% include "partials/empty_state.html" with title="No generated maps found" message="No HTML files were found under the configured map directories." hint="The map module writes to the current directory by default and has no configured output location." issues="ISS-016,ISS-017,ISS-083" %}
+  {% endif %}
+</section>
+{% endblock %}

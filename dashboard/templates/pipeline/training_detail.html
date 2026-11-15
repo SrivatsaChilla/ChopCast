@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% load dashboard_tags %}
+{% block content %}
+<div class="page-actions">
+  <a href="{% url 'pipeline:training' %}">← Training</a>
+  {% if run.model_id %}<a class="button ghost" href="{% url 'pipeline:registry_detail' run.model_id %}">Registry record</a>{% endif %}
+  {% if run.model_id %}<a class="button ghost" href="{% url 'pipeline:evaluation_detail' run.model_id %}">Evaluation</a>{% endif %}
+</div>
+
+{% if run.warnings %}
+<section class="banner-stack">
+  {% for warning in run.warnings %}<div class="banner warning">{{ warning }}</div>{% endfor %}
+</section>
+{% endif %}
+
+<section class="section">
+  <div class="section-head"><h2>{{ run.model_version|default:run.key }}</h2><span class="badge state-info">{{ run.source_path }}</span></div>
+  <dl class="facts panel">
+    <dt>Key</dt><dd class="mono small">{{ run.key }}</dd>
+    <dt>Registry id</dt><dd>{{ run.model_id|default:"—" }}</dd>
+    <dt>Stored kind</dt><dd>{{ run.model_kind_stored|default:"—" }}</dd>
+    <dt>Manifest kind</dt><dd>{{ run.model_kind_manifest|default:"—" }}</dd>
+    <dt>Feature version</dt><dd>{{ run.feature_version|default:"—" }}</dd>
+    <dt>Registered</dt><dd class="mono small">{{ run.registered_at|default:"—" }}</dd>
+    <dt>Artifact path</dt><dd class="mono small wrap">{{ run.artifact_path|default:"—" }}</dd>
+    <dt>Resolved artifact</dt><dd class="mono small wrap">{{ run.artifact_resolved|default:"not found" }}</dd>
+  </dl>
+</section>
+
+<section class="section">
+  <div class="section-head"><h2>Metrics</h2><span class="muted">persisted values only</span></div>
+  <div class="metric-grid compact">
+    {% for key, value in numbers.items %}
+      {% include "partials/metric_card.html" with label=key value=value|metric %}
+    {% endfor %}
+  </div>
+  {% if classes %}
+  <div class="two-col tight">
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Per-class metrics</caption>
+        <thead><tr><th scope="col">Class</th><th scope="col" class="num">Precision</th><th scope="col" class="num">Recall</th><th scope="col" class="num">F1</th><th scope="col" class="num">Support</th></tr></thead>
+        <tbody>
+          {% for row in classes %}
+          <tr><td><span class="badge {{ row.label|severity_class }}">{{ row.label }}</span></td><td class="num">{{ row.precision|metric }}</td><td class="num">{{ row.recall|metric }}</td><td class="num">{{ row.f1|metric }}</td><td class="num">{% if row.support == 0 %}<span class="badge state-warning">0</span>{% else %}{{ row.support|default:"—" }}{% endif %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if matrix %}
+    <div class="table-wrap">
+      <table class="matrix">
+        <caption>Confusion matrix · rows = actual</caption>
+        <thead><tr><th scope="col">actual \ predicted</th>{% for label in matrix.labels %}<th scope="col">{{ label }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in matrix_rows %}
+          <tr><th scope="row">{{ row.label }}</th>{% for cell in row.cells %}<td class="num{% if cell.value %} has-value{% endif %}">{{ cell.value }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+  {% else %}
+    {% include "partials/empty_state.html" with title="No per-class metrics" message="No metrics document was found for this run." issues="ISS-087" %}
+  {% endif %}
+</section>
+
+<section class="section">
+  <div class="section-head"><h2>Split</h2><span class="muted">counts only; hashes are not displayed</span></div>
+  {% if split %}
+  <dl class="facts panel">
+    <dt>Manifest</dt><dd class="mono small">{{ split.name }}</dd>
+    <dt>Version</dt><dd>{{ split.version|default:"—" }}</dd>
+    <dt>Seed</dt><dd>{{ split.seed|default:"—" }}</dd>
+    <dt>Mode</dt><dd>{{ split.mode|default:"—" }}</dd>
+    <dt>Train / test</dt><dd>{{ split.train_count }} / {{ split.test_count }}</dd>
+    <dt>Modified</dt><dd class="mono small">{{ split.mtime|slice:19|default:"—" }}</dd>
+  </dl>
+  {% else %}
+    {% include "partials/empty_state.html" with title="No split manifest" message="No split.json in the artifact and no matching runs/split-*.json." issues="ISS-038" %}
+  {% endif %}
+</section>
+
+<div class="two-col">
+  <section class="section">
+    <div class="section-head"><h2>Artifact files</h2><span class="muted">{{ files|length }} recognised</span></div>
+    {% if files %}
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Artifact files</caption>
+        <thead><tr><th scope="col">Name</th><th scope="col" class="num">Size</th><th scope="col">Modified</th></tr></thead>
+        <tbody>
+          {% for file in files %}<tr><td class="mono">{{ file.name }}</td><td class="num">{{ file.size|human_bytes }}</td><td class="mono small">{{ file.mtime|slice:19 }}</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="muted small">pipeline.joblib is listed by name and size only; it is never loaded. <a href="{% url 'core:issues' %}#iss-078">ISS-078</a></p>
+    {% else %}
+      {% include "partials/empty_state.html" with title="No artifact files" message="The artifact directory is missing or contains none of the recognised files." %}
+    {% endif %}
+  </section>
+  <section class="section">
+    <div class="section-head"><h2>Manifest</h2><span class="muted">manifest.txt</span></div>
+    {% if manifest %}
+      <dl class="facts panel">{% for key, value in manifest.items %}<dt class="mono">{{ key }}</dt><dd class="mono">{{ value }}</dd>{% endfor %}</dl>
+    {% else %}
+      {% include "partials/empty_state.html" with title="No manifest" message="No manifest.txt was found." %}
+    {% endif %}
+  </section>
+</div>
+
+<section class="section">
+  <div class="section-head"><h2>Lineage</h2><span class="muted">full JSON, unmodified</span></div>
+  {% if run.lineage %}
+    {% include "partials/json_viewer.html" with title="lineage.json" value=run.lineage %}
+  {% else %}
+    {% include "partials/empty_state.html" with title="No lineage" message="This run has no lineage.json; that is expected for the JSONL trainer path." issues="ISS-045" %}
+  {% endif %}
+</section>
+{% endblock %}

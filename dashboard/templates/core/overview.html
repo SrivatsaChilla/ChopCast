@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% load dashboard_tags %}
+{% block content %}
+
+{% if quality %}
+<section class="banner-stack" aria-label="Findings">
+  {% for item in quality %}
+  <div class="banner {{ item.state }}">
+    <strong>{{ item.state|title }}:</strong> {{ item.text }}
+    <a href="{% url item.url_name %}{% if item.anchor %}#{{ item.anchor }}{% endif %}">Inspect →</a>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section class="section">
+  <div class="section-head">
+    <h2>Key counts</h2>
+    <span class="muted">stored values, not estimates</span>
+  </div>
+  <div class="metric-grid">
+    {% include "partials/metric_card.html" with label="Reports" value=summary.total|default:"—" sublabel=summary_status.detail|default:"raw database" href="/data/reports/" %}
+    {% include "partials/metric_card.html" with label="Trainable" value=summary.trainable_rows|default:"—" sublabel="live trainable view" href="/labels/" %}
+    {% include "partials/metric_card.html" with label="Labelled rows" value=labels.labelled|default:"—" sublabel="either layer" href="/labels/" %}
+    {% include "partials/metric_card.html" with label="Models" value=models|length sublabel="registry rows" href="/registry/" %}
+    {% if current %}
+      {% include "partials/metric_card.html" with label="Production" value=current.model_version sublabel="promoted" href="/registry/" %}
+    {% else %}
+      {% include "partials/metric_card.html" with label="Production" value="none" sublabel="no promotion" tone="warn" href="/registry/" %}
+    {% endif %}
+    {% include "partials/metric_card.html" with label="Feature files" value=feature_count sublabel="data/features + processed" href="/training/" %}
+    {% include "partials/metric_card.html" with label="Generated maps" value=map_files|length sublabel="HTML files found" href="/maps/files/" %}
+    {% include "partials/metric_card.html" with label="Log files" value=log_files|length sublabel="configured roots" href="/logs/" %}
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <h2>Pipeline stages</h2>
+    <span class="muted">{{ stages|length }} stages · evidence first</span>
+  </div>
+  <div class="stage-grid">
+    {% for stage in stages %}
+    <a class="stage-card stage-{{ stage.state }}" href="{{ stage.url }}">
+      <span class="stage-top"><strong>{{ stage.name }}</strong><span class="badge {{ stage.state|state_class }}">{{ stage.state }}</span></span>
+      <span class="stage-count">{{ stage.counts }}</span>
+      <span class="stage-finding">{{ stage.finding }}</span>
+      <span class="stage-evidence">{{ stage.evidence|slice:19 }}</span>
+      {% if stage.issues %}<span class="issue-links">{% for issue in stage.issues %}<span>{{ issue }}</span>{% endfor %}</span>{% endif %}
+    </a>
+    {% endfor %}
+  </div>
+</section>
+
+<div class="two-col">
+  <section class="section">
+    <div class="section-head">
+      <h2>Recent errors</h2>
+      <a href="{% url 'pipeline:logs' %}">All logs</a>
+    </div>
+    {% if recent_errors %}
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Recent errors from logs and collection runs</caption>
+        <thead><tr><th scope="col">When</th><th scope="col">Source</th><th scope="col">Detail</th></tr></thead>
+        <tbody>
+          {% for row in recent_errors %}
+          <tr>
+            <td class="mono small">{{ row.when|slice:19|default:"—" }}</td>
+            <td>{{ row.source }}</td>
+            <td class="truncate" title="{{ row.text }}">{{ row.text }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      {% include "partials/empty_state.html" with title="No errors recorded" message="No error-level log lines or failed runs were found in the readable sources." hint="This is not proof that nothing failed; logs may not exist." %}
+    {% endif %}
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <h2>Quick links</h2>
+      <span class="muted">common next steps</span>
+    </div>
+    <div class="quick-links">
+      <a href="{% url 'pipeline:data' %}"><strong>Data</strong><span>counts, schema, quality</span></a>
+      <a href="{% url 'pipeline:labels' %}"><strong>Labels</strong><span>distributions and rule preview</span></a>
+      <a href="{% url 'pipeline:training' %}"><strong>Training</strong><span>inferred runs and splits</span></a>
+      <a href="{% url 'geo:maps' %}"><strong>Maps</strong><span>filters, markers, heat</span></a>
+      <a href="{% url 'core:issues' %}"><strong>Known issues</strong><span>the full register</span></a>
+      <a href="{% url 'core:system' %}"><strong>System</strong><span>paths, config, checks</span></a>
+    </div>
+  </section>
+</div>
+
+{% if capabilities %}
+<section class="section">
+  <div class="section-head">
+    <h2>Detected capabilities</h2>
+    <a href="{% url 'core:system' %}">Full diagnostics</a>
+  </div>
+  <div class="two-col tight">
+    <div class="panel">
+      <h3>Raw database · {{ capabilities.raw.state }}</h3>
+      <dl class="facts">
+        <dt>tables</dt><dd>{{ capabilities.raw.tables|join:", " }}</dd>
+        <dt>trainable predicate</dt><dd>{{ capabilities.raw.trainable_predicate }}</dd>
+        <dt>report_type in trainable</dt><dd>{{ capabilities.raw.has_report_type_in_trainable|yesno_icon }}</dd>
+        <dt>schema migrations</dt><dd>{{ capabilities.raw.schema_migrations|join:", "|default:"none" }}</dd>
+        <dt>runs shape</dt><dd>{{ capabilities.raw.runs_shape }}</dd>
+      </dl>
+    </div>
+    <div class="panel">
+      <h3>Registry · {{ capabilities.registry.state }}</h3>
+      <dl class="facts">
+        <dt>tables</dt><dd>{{ capabilities.registry.tables|join:", " }}</dd>
+        <dt>models</dt><dd>{{ capabilities.registry.has_models|yesno_icon }}</dd>
+        <dt>promotions</dt><dd>{{ capabilities.registry.has_promotions|yesno_icon }}</dd>
+        <dt>stray raw tables</dt><dd>{{ capabilities.registry.stray_raw_tables|join:", "|default:"none" }}</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{% endblock %}

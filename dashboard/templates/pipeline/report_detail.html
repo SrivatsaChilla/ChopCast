@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% load dashboard_tags %}
+{% block content %}
+{% with row=detail.row %}
+<div class="page-actions">
+  <a href="{% url 'pipeline:reports' %}">← Reports</a>
+  <a class="button ghost" href="{% url 'geo:maps' %}?q={{ row.hash }}">Show on map</a>
+</div>
+
+<section class="section">
+  <div class="section-head">
+    <h2 class="mono break">{{ row.hash }}</h2>
+    <button type="button" class="button ghost" data-copy-value="{{ row.hash }}">Copy hash</button>
+  </div>
+  <div class="metric-grid compact">
+    {% include "partials/metric_card.html" with label="Observed" value=row.obs_time|slice:19|default:"—" sublabel="obs_time" %}
+    {% include "partials/metric_card.html" with label="Fetched" value=row.fetched_at|slice:19|default:"—" sublabel="fetched_at" %}
+    {% include "partials/metric_card.html" with label="Type" value=row.report_type|default:"—" sublabel="report_type" %}
+    {% include "partials/metric_card.html" with label="Altitude" value=row.altitude|floatformat:0|default:"—" sublabel="feet" %}
+    {% include "partials/metric_card.html" with label="Aircraft" value=row.aircraft|default:"—" sublabel="as stored" %}
+    {% include "partials/metric_card.html" with label="Latitude" value=row.lat|default:"—" sublabel="degrees" %}
+    {% include "partials/metric_card.html" with label="Longitude" value=row.lon|default:"—" sublabel="degrees" %}
+  </div>
+</section>
+
+<div class="two-col">
+  <section class="section">
+    <div class="section-head"><h2>Labels</h2><span class="muted">stored values, not re-parsed</span></div>
+    <dl class="facts panel">
+      <dt>Primary (turbulence)</dt><dd>{% if row.turbulence %}<span class="badge {{ row.turbulence|severity_class }}">{{ row.turbulence }}</span>{% else %}<span class="muted">NULL</span>{% endif %}</dd>
+      <dt>Secondary (turbulence_2)</dt><dd>{% if row.turbulence_2 %}<span class="badge {{ row.turbulence_2|severity_class }}">{{ row.turbulence_2 }}</span>{% else %}<span class="muted">NULL</span>{% endif %}</dd>
+      <dt>Stored label layer</dt><dd>primary if present, otherwise secondary</dd>
+    </dl>
+    <p class="issue-links"><a href="{% url 'core:issues' %}#iss-003">ISS-003</a> <a href="{% url 'core:issues' %}#iss-009">ISS-009</a></p>
+  </section>
+  <section class="section">
+    <div class="section-head"><h2>Parser</h2><span class="muted">not executed</span></div>
+    <div class="banner info">
+      The dashboard does not import the parser or labeler. The values above are exactly what the database stores.
+      The parser's known tokenizer limitation is documented as
+      <a href="{% url 'core:issues' %}#iss-008">ISS-008</a>.
+    </div>
+  </section>
+</div>
+
+<section class="section">
+  <div class="section-head"><h2>Raw text</h2><button type="button" class="button ghost" data-copy="raw-text">Copy</button></div>
+  {% if row.raw_text %}
+    <pre class="code raw-text" id="raw-text">{{ row.raw_text }}</pre>
+  {% else %}
+    {% include "partials/empty_state.html" with title="No raw text" message="This report has a NULL or empty raw_text value." %}
+  {% endif %}
+</section>
+
+<section class="section">
+  <div class="section-head"><h2>Raw JSON</h2><span class="muted">single-record view only</span></div>
+  {% if detail.raw_json %}
+    {% include "partials/json_viewer.html" with title="raw_json" value=detail.raw_json %}
+  {% elif detail.raw_json_error %}
+    <div class="banner error"><strong>Malformed raw_json:</strong> {{ detail.raw_json_error }}</div>
+  {% else %}
+    {% include "partials/empty_state.html" with title="No raw JSON" message="The raw_json column is empty." %}
+  {% endif %}
+</section>
+{% endwith %}
+{% endblock %}

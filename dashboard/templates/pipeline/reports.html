@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% load dashboard_tags %}
+{% block content %}
+<section class="section">
+  <div class="section-head">
+    <h2>Report table</h2>
+    <span class="muted">{{ page_obj.total|default:"0" }} matching of {{ total_all }} total reports</span>
+  </div>
+
+  <form class="filter-bar" method="get" action="{% url 'pipeline:reports' %}"
+        hx-get="{% url 'pipeline:reports' %}" hx-target="#reports-results" hx-push-url="true">
+    <label class="grow">Search
+      <input type="search" name="q" value="{{ filters.q }}" placeholder="raw text or hash" autocomplete="off">
+    </label>
+    <label>Type
+      <select name="report_type">
+        <option value="">any</option>
+        {% for value in report_types %}<option value="{{ value }}"{% if filters.report_type == value %} selected{% endif %}>{{ value }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Layer
+      <select name="label_layer">
+        <option value="any"{% if filters.label_layer == "any" %} selected{% endif %}>any</option>
+        <option value="primary"{% if filters.label_layer == "primary" %} selected{% endif %}>primary</option>
+        <option value="secondary"{% if filters.label_layer == "secondary" %} selected{% endif %}>secondary</option>
+        <option value="combined"{% if filters.label_layer == "combined" %} selected{% endif %}>combined</option>
+      </select>
+    </label>
+    <label>Label
+      <select name="label">
+        <option value="">any</option>
+        {% for value in label_values %}<option value="{{ value }}"{% if filters.label == value %} selected{% endif %}>{{ value }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>From
+      <input type="date" name="date_from" value="{{ filters.date_from }}">
+    </label>
+    <label>To
+      <input type="date" name="date_to" value="{{ filters.date_to }}">
+    </label>
+    <label>Alt min
+      <input type="number" name="alt_min" value="{{ filters.alt_min|default_if_none:'' }}" step="100" placeholder="ft">
+    </label>
+    <label>Alt max
+      <input type="number" name="alt_max" value="{{ filters.alt_max|default_if_none:'' }}" step="100" placeholder="ft">
+    </label>
+    <label>Coordinates
+      <select name="has_coords">
+        <option value=""{% if not filters.has_coords %} selected{% endif %}>any</option>
+        <option value="yes"{% if filters.has_coords == "yes" %} selected{% endif %}>valid only</option>
+        <option value="no"{% if filters.has_coords == "no" %} selected{% endif %}>missing/invalid</option>
+      </select>
+    </label>
+    <label>Size
+      <select name="page_size">
+        {% for size in page_sizes %}<option value="{{ size }}"{% if page_obj.page_size == size %} selected{% endif %}>{{ size }}</option>{% endfor %}
+      </select>
+    </label>
+    <input type="hidden" name="sort" value="{{ filters.sort }}">
+    <input type="hidden" name="dir" value="{{ filters.direction }}">
+    <div class="filter-actions">
+      <button type="submit" class="button">Apply</button>
+      <a class="button ghost" href="{% url 'pipeline:reports' %}">Reset</a>
+    </div>
+  </form>
+</section>
+
+<div id="reports-results">
+  {% include "pipeline/_reports_table.html" with rows=page_obj.items %}
+</div>
+{% endblock %}

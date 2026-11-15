@@ -1,0 +1,74 @@
+{% load static dashboard_tags %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{{ page_title|default:"Dashboard" }} · ChopCast</title>
+  <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="app">
+  <aside class="sidebar" id="sidebar" aria-label="Primary navigation">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">CC</span>
+      <span class="brand-text"><strong>ChopCast</strong><small>read-only dashboard</small></span>
+    </div>
+    <div class="sidebar-meta">
+      {% if profile %}<span class="badge state-info">{{ profile }}</span>{% else %}<span class="badge">no profile</span>{% endif %}
+      <span class="badge state-ok">read-only</span>
+    </div>
+    <nav class="nav">
+      <p class="nav-group">Pipeline</p>
+      {% for item in nav_items %}
+        {% if item.key == "maps" %}<p class="nav-group">Operate</p>{% endif %}
+        <a class="nav-link{% if item.active %} is-active{% endif %}" href="{{ item.url }}"{% if item.active %} aria-current="page"{% endif %}>{{ item.label }}</a>
+      {% endfor %}
+    </nav>
+    <div class="sidebar-footer">
+      <span>data as of</span>
+      <time datetime="{{ freshness }}">{{ freshness|slice:19|default:"unknown" }}</time>
+      <a href="{% url 'core:issues' %}">Known issues →</a>
+    </div>
+  </aside>
+
+  <div class="shell">
+    <header class="topbar">
+      <button type="button" class="icon-button nav-toggle" id="nav-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Toggle navigation">☰</button>
+      <div class="topbar-title">
+        <span class="eyebrow">ChopCast pipeline</span>
+        <h1>{{ page_title|default:"Dashboard" }}</h1>
+      </div>
+      <div class="chips" aria-label="Source status">
+        {% with s=health_statuses.raw_db %}{% if s %}<a class="chip {{ s.state|state_class }}" href="{% url 'core:system' %}" title="{{ s.detail }}"><span class="dot" aria-hidden="true"></span>Raw <em>{{ s.state.value }}</em></a>{% endif %}{% endwith %}
+        {% with s=health_statuses.registry %}{% if s %}<a class="chip {{ s.state|state_class }}" href="{% url 'pipeline:registry' %}" title="{{ s.detail }}"><span class="dot" aria-hidden="true"></span>Registry <em>{{ s.state.value }}</em></a>{% endif %}{% endwith %}
+        {% with s=health_statuses.artifacts %}{% if s %}<a class="chip {{ s.state|state_class }}" href="{% url 'pipeline:training' %}" title="{{ s.detail }}"><span class="dot" aria-hidden="true"></span>Artifacts <em>{{ s.state.value }}</em></a>{% endif %}{% endwith %}
+        <a class="button ghost" href="{{ request.get_full_path }}">Refresh</a>
+      </div>
+    </header>
+
+    {% if adapter_error %}
+      <div class="banner error" role="alert">
+        <strong>Adapter unavailable.</strong> {{ adapter_error }}
+        <a href="{% url 'core:system' %}">Open System</a>
+      </div>
+    {% endif %}
+
+    <main id="main" class="main">
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+      <span>Read-only · data as of <time datetime="{{ freshness }}">{{ freshness|slice:19 }}</time> · ChopCast {{ dashboard_version }}</span>
+      <span><a href="{% url 'core:issues' %}">Issue register</a> · <a href="{% url 'core:health' %}">Health JSON</a></span>
+    </footer>
+  </div>
+</div>
+<div class="scrim" id="scrim" hidden></div>
+<script src="{% static 'vendor/htmx/2.0.4/htmx.min.js' %}" defer></script>
+<script src="{% static 'js/dashboard.js' %}" defer></script>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

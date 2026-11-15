@@ -31,6 +31,7 @@ def run_training(
     settings: Settings,
     model_version: str,
     use_weather: bool = False,
+    model_kind: str = "baseline",
 ) -> str:
     """Run the end-to-end training pipeline.
 
@@ -55,7 +56,10 @@ def run_training(
     log.info("training.loading_data", db=str(paths.raw_db_path))
     conn = sqlite3.connect(paths.raw_db_path)
     conn.row_factory = sqlite3.Row
-    cursor = conn.execute("SELECT * FROM trainable")
+
+    # FILTER: Only use PIREPs for training the NLP model.
+    # AIREPs are structured and don't need a transformer to be classified.
+    cursor = conn.execute("SELECT * FROM trainable WHERE report_type = 'PIREP' OR report_type = 'Urgent PIREP'")
     all_rows = cursor.fetchall()
     conn.close()
 
@@ -101,23 +105,41 @@ def run_training(
         y_train = [f.severity_label for f in train_set]
         X_test = [(f.clean_text, f.weather.to_dict() if f.weather else {}) for f in test_set]
         y_test = [f.severity_label for f in test_set]
-        kind = "baseline-weather"
+        kind = f"transformer-weather" if model_kind == "transformer" else "baseline-weather"
     else:
         X_train = [f.clean_text for f in train_set]
         y_train = [f.severity_label for f in train_set]
         X_test = [f.clean_text for f in test_set]
         y_test = [f.severity_label for f in test_set]
-        kind = "baseline"
+        kind = model_kind
+
     # 5. Train Model
     log.info("training.fitting_model", kind=kind)
-    model = BaselineSklearn.train(
-        X=X_train,
-        y=y_train,
-        tfidf=settings.text.tfidf,
-        train=settings.training.baseline,
-        model_version=model_version,
-        feature_version=settings.processing.feature_builder_version,
-    )
+
+    if model_kind == "transformer":
+        from chopcast.training.transformer_trainer import train_transformer
+        # Transformer trainer expects raw lists of texts/labels
+        model = train_transformer(
+            hashes=hashes,
+            X_text=[f.clean_text for f in processed_features],
+            y=labels,
+            split_cfg=settings.training.default_split,
+            text_cfg=settings.text.transformer,
+            train_cfg=settings.training.transformer,
+            labeling_cfg=settings.labeling,
+            feature_version=settings.processing.feature_builder_version,
+            model_version=model_version,
+            output_dir=str(Path(paths.models_dir) / f"{model_version}_transformer"),
+        )
+    else:
+        model = BaselineSklearn.train(
+            X=X_train,
+            y=y_train,
+            tfidf=settings.text.tfidf,
+            train=settings.training.baseline,
+            model_version=model_version,
+            feature_version=settings.processing.feature_builder_version,
+        )
 
     # 5. Evaluate (using formal EvaluationReport)
     y_pred = model.predict(X_test)
@@ -132,11 +154,11 @@ def run_training(
     log.info("training.evaluated", macro_f1=report.macro)
 
     # 6. Persistence & Lineage
-    artifact_dir = paths.models_dir / f"{kind}-{model_version}"
+    artifact_dir = Path(paths.models_dir) / f"{kind}-{model_version}"
     model.save(artifact_dir)
 
     # Save Split Manifest
-    split_path = paths.runs_dir / f"split-{model_version}.json"
+    split_path = Path(paths.runs_dir) / f"split-{model_version}.json"
     save_split(split, split_path)
 
     # Lineage File

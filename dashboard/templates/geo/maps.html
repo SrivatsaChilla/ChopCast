@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% load static dashboard_tags %}
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'vendor/leaflet/1.9.4/leaflet.css' %}">
+<link rel="stylesheet" href="{% static 'vendor/leaflet-markercluster/1.5.3/MarkerCluster.css' %}">
+<link rel="stylesheet" href="{% static 'vendor/leaflet-markercluster/1.5.3/MarkerCluster.Default.css' %}">
+{% endblock %}
+{% block content %}
+
+<section class="section">
+  <div class="section-head">
+    <h2>Map</h2>
+    <span class="muted">{{ provenance|default:"source unknown" }} {% if tile_url %}<span class="badge state-warning">online tiles</span>{% else %}<span class="badge state-ok">offline basemap</span>{% endif %}</span>
+  </div>
+
+  <div class="map-summary">
+    <span><strong>{{ data.total_matching|default:"0" }}</strong> matching</span>
+    <span><strong>{{ data.plottable|default:"0" }}</strong> plottable</span>
+    <span><strong>{{ data.invalid_coords|default:"0" }}</strong> invalid coordinates</span>
+    <span><strong>{{ data.returned|default:"0" }}</strong> returned</span>
+    {% if data.truncated %}<span class="badge state-warning">truncated at {{ map_max_points }}</span>{% endif %}
+  </div>
+
+  <form class="filter-bar map-filters" method="get" action="{% url 'geo:maps' %}" id="map-filters">
+    <label>From<input type="date" name="date_from" value="{{ filters.date_from }}" id="date-from"></label>
+    <label>To<input type="date" name="date_to" value="{{ filters.date_to }}" id="date-to"></label>
+    <span class="preset-group" aria-label="Date presets">
+      <button type="button" class="button ghost small" data-days="1">24h</button>
+      <button type="button" class="button ghost small" data-days="7">7d</button>
+      <button type="button" class="button ghost small" data-days="30">30d</button>
+      <button type="button" class="button ghost small" data-days="all">all</button>
+    </span>
+    <label>Alt preset
+      <select id="alt-preset">
+        <option value="">custom</option>
+        <option value="0,10000">surface–10k</option>
+        <option value="10000,20000">10k–20k</option>
+        <option value="20000,30000">20k–30k</option>
+        <option value="30000,40000">30k–40k</option>
+        <option value="40000,">40k+</option>
+      </select>
+    </label>
+    <label>Alt min<input type="number" name="alt_min" value="{{ filters.alt_min|default_if_none:'' }}" step="500" id="alt-min"></label>
+    <label>Alt max<input type="number" name="alt_max" value="{{ filters.alt_max|default_if_none:'' }}" step="500" id="alt-max"></label>
+    <label>Layer
+      <select name="label_layer">
+        <option value="combined"{% if filters.label_layer == "combined" %} selected{% endif %}>combined (derived)</option>
+        <option value="primary"{% if filters.label_layer == "primary" %} selected{% endif %}>primary (turbulence)</option>
+        <option value="secondary"{% if filters.label_layer == "secondary" %} selected{% endif %}>secondary (turbulence_2)</option>
+        <option value="all"{% if filters.label_layer == "all" %} selected{% endif %}>all rows</option>
+      </select>
+    </label>
+    <label>Class
+      <select name="label">
+        <option value="">all</option>
+        {% for class in classes %}<option value="{{ class }}"{% if label_class == class %} selected{% endif %}>{{ class }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Report type
+      <select name="report_type"{% if not report_types %} disabled title="This view has no report_type column"{% endif %}>
+        <option value="">any</option>
+        {% for value in report_types %}<option value="{{ value }}"{% if filters.report_type == value %} selected{% endif %}>{{ value }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="grow">Text<input type="search" name="q" value="{{ filters.q }}" placeholder="raw text or hash"></label>
+    <div class="filter-actions">
+      <button type="submit" class="button">Apply</button>
+      <a class="button ghost" href="{% url 'geo:maps' %}">Reset</a>
+      <button type="button" class="button ghost" id="filter-view">Filter to current view</button>
+    </div>
+    <span class="filter-note" id="map-status" aria-live="polite"></span>
+  </form>
+
+  {% if data.warnings %}
+    {% for warning in data.warnings %}<div class="banner warning">{{ warning }}</div>{% endfor %}
+  {% endif %}
+</section>
+
+<div class="map-layout">
+  <section class="map-panel">
+    <div id="map" class="map" role="application" aria-label="Interactive turbulence map. A points table follows below."></div>
+    <p class="muted small">Markers use the same severity colours as the pipeline map. The basemap is a vendored Natural Earth outline; no tile requests are made unless a tile URL is configured.</p>
+  </section>
+
+  <aside class="map-side">
+    <div class="panel">
+      <div class="section-head compact"><h3>Legend</h3><span class="muted">mapped classes</span></div>
+      <ul class="legend">
+        {% for class in classes %}
+        <li><span class="legend-dot" style="background: {{ colors|get_item:class }}"></span>{{ class }}<span class="num">{{ class_counts|get_item:class|default:"0" }}</span></li>
+        {% endfor %}
+        <li><span class="legend-dot" style="background: {{ colors|get_item:'Unlabelled' }}"></span>Unlabelled<span class="num">{{ class_counts|get_item:'Unlabelled'|default:"0" }}</span></li>
+      </ul>
+      <p class="muted small">The canonical label layer is an open decision (<a href="{% url 'core:issues' %}#iss-003">ISS-003</a>). This page shows each layer.</p>
+    </div>
+    <div class="panel">
+      <div class="section-head compact"><h3>Layers</h3></div>
+      <label class="check"><input type="checkbox" id="show-markers" checked> Markers</label>
+      <label class="check"><input type="checkbox" id="show-clusters"> Clusters</label>
+      <label class="check"><input type="checkbox" id="show-heat"> Heatmap</label>
+      <p class="muted small">Clusters are used automatically above 500 points when markers are enabled.</p>
+    </div>
+    <div class="panel">
+      <div class="section-head compact"><h3>Generated files</h3><a href="{% url 'geo:map_files' %}">Browse</a></div>
+      <p class="muted small">{{ map_files|length }} HTML file(s) found. Generated folium maps may need internet for assets (<a href="{% url 'core:issues' %}#iss-084">ISS-084</a>). This map does not.</p>
+    </div>
+  </aside>
+</div>
+
+<section class="section">
+  <div class="section-head">
+    <h2>Points</h2>
+    <span class="muted">{{ page_obj.total|default:"0" }} plottable rows · table paginated independently</span>
+  </div>
+  {% if page_obj.items %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <caption class="sr-only">Map points</caption>
+      <thead><tr><th scope="col">Hash</th><th scope="col">Observed</th><th scope="col">Type</th><th scope="col">Altitude</th><th scope="col">Aircraft</th><th scope="col">Primary</th><th scope="col">Secondary</th><th scope="col">Combined</th></tr></thead>
+      <tbody>
+        {% for point in page_obj.items %}
+        <tr>
+          <td class="mono small"><a href="{% url 'pipeline:report_detail' point.hash %}">{{ point.hash|slice:12 }}…</a>{% if point.suspicious %} <span class="badge state-warning" title="0,0 coordinates">suspect</span>{% endif %}</td>
+          <td class="mono small">{{ point.obs_time|slice:19|default:"—" }}</td>
+          <td>{{ point.report_type|default:"—" }}</td>
+          <td class="num">{{ point.altitude|floatformat:0|default:"—" }}</td>
+          <td>{{ point.aircraft|default:"—" }}</td>
+          <td>{% if point.label_primary %}<span class="badge {{ point.label_primary|severity_class }}">{{ point.label_primary }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td>{% if point.label_secondary %}<span class="badge {{ point.label_secondary|severity_class }}">{{ point.label_secondary }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td>{% if point.label_combined %}<span class="badge {{ point.label_combined|severity_class }}">{{ point.label_combined }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+  {% else %}
+    {% include "partials/empty_state.html" with title="No points to show" message="No trainable rows with valid coordinates match the current filters." hint="Try the 'all rows' layer or clear the date range." %}
+  {% endif %}
+</section>
+
+{{ map_config|json_script:"map-config" }}
+{% endblock %}
+{% block extra_scripts %}
+<script src="{% static 'vendor/leaflet/1.9.4/leaflet.js' %}" defer></script>
+<script src="{% static 'vendor/leaflet-markercluster/1.5.3/leaflet.markercluster.js' %}" defer></script>
+<script src="{% static 'vendor/leaflet-heat/0.2.0/leaflet-heat.js' %}" defer></script>
+<script src="{% static 'js/map.js' %}" defer></script>
+{% endblock %}

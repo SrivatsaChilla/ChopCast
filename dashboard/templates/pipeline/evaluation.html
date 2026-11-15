@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% load dashboard_tags %}
+{% block content %}
+<section class="section">
+  <div class="section-head">
+    <h2>Persisted metrics</h2>
+    <span class="muted">the dashboard does not evaluate models</span>
+    <a class="button ghost" href="{% url 'pipeline:evaluation_compare' %}">Compare two models</a>
+  </div>
+  {% if rows %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <caption class="sr-only">Model evaluation summary</caption>
+      <thead><tr><th scope="col">ID</th><th scope="col">Model</th><th scope="col">Kind</th><th scope="col">Feature</th><th scope="col" class="num">Accuracy</th><th scope="col" class="num">Macro F1</th><th scope="col" class="num">Weighted F1</th><th scope="col" class="num">Samples</th><th scope="col">Source</th><th scope="col">Warnings</th><th scope="col"></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="num">{{ row.record.model_id }}</td>
+          <td><strong>{{ row.record.model_version }}</strong></td>
+          <td>{{ row.record.model_kind|default:"—" }}</td>
+          <td>{{ row.record.feature_version|default:"—" }}</td>
+          <td class="num">{{ row.numbers.accuracy|metric }}</td>
+          <td class="num">{{ row.numbers.macro_f1|metric }}</td>
+          <td class="num">{{ row.numbers.weighted_f1|metric }}</td>
+          <td class="num">{{ row.numbers.n_samples|metric }}</td>
+          <td><span class="badge state-info">{{ row.record.source }}</span></td>
+          <td>{% if row.record.warnings %}<span class="badge state-warning">{{ row.record.warnings|length }}</span>{% else %}<span class="badge state-ok">none</span>{% endif %}</td>
+          <td><a href="{% url 'pipeline:evaluation_detail' row.record.model_id %}">Detail →</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    {% include "partials/empty_state.html" with title="No persisted evaluation found" message="There are no registry models with metrics. Evaluation is not run by the dashboard." issues="ISS-087" %}
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,70 @@
+{
+  "accuracy": 0.9,
+  "confusion": {
+    "labels": [
+      "None",
+      "Light",
+      "Moderate",
+      "Severe"
+    ],
+    "matrix": [
+      [
+        20,
+        1,
+        0,
+        0
+      ],
+      [
+        2,
+        14,
+        3,
+        0
+      ],
+      [
+        0,
+        2,
+        9,
+        1
+      ],
+      [
+        0,
+        0,
+        1,
+        6
+      ]
+    ]
+  },
+  "macro_f1": 0.63,
+  "model_kind": "transformer",
+  "n_samples": 58,
+  "per_class": [
+    {
+      "f1": 0.89,
+      "label": "None",
+      "precision": 0.91,
+      "recall": 0.88,
+      "support": 20
+    },
+    {
+      "f1": 0.71,
+      "label": "Light",
+      "precision": 0.74,
+      "recall": 0.69,
+      "support": 16
+    },
+    {
+      "f1": 0.6,
+      "label": "Moderate",
+      "precision": 0.62,
+      "recall": 0.58,
+      "support": 12
+    },
+    {
+      "f1": 0.47,
+      "label": "Severe",
+      "precision": 0.5,
+      "recall": 0.45,
+      "support": 10
+    }
+  ]
+}

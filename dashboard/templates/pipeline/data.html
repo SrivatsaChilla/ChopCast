@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% load dashboard_tags %}
+{% block content %}
+
+{% if not summary %}
+  {% include "partials/error_state.html" with title="Raw database unavailable" message=summary_status.detail path=source.path issues="ISS-002,ISS-011" %}
+  {% include "partials/empty_state.html" with title="What to check" message="The dashboard only reads an existing database. It never runs migrations or creates files." hint="Set CHOPCAST_DASHBOARD_RAW_DB to a readable SQLite file, then refresh." url="/system/" label="Open System" %}
+{% else %}
+
+<section class="section">
+  <div class="section-head">
+    <h2>Counts</h2>
+    <span class="muted">{{ summary_status.detail|default:"raw reports" }}</span>
+  </div>
+  <div class="metric-grid">
+    {% include "partials/metric_card.html" with label="Reports" value=summary.total sublabel="distinct hashes" %}
+    {% include "partials/metric_card.html" with label="Trainable" value=summary.trainable_rows sublabel="live view predicate" %}
+    {% include "partials/metric_card.html" with label="Primary labels" value=summary.primary_labelled sublabel="turbulence" %}
+    {% include "partials/metric_card.html" with label="Secondary labels" value=summary.secondary_labelled sublabel="turbulence_2" %}
+    {% include "partials/metric_card.html" with label="With coordinates" value=summary.with_coords sublabel="plottable" %}
+    {% include "partials/metric_card.html" with label="Invalid coordinates" value=summary.invalid_coords sublabel="out of range" tone="warn" %}
+    {% include "partials/metric_card.html" with label="No coordinates" value=summary.without_coords sublabel="not mappable" %}
+    {% include "partials/metric_card.html" with label="Fetch days" value=quality.distinct_fetch_days|default:"—" sublabel="distinct dates" %}
+  </div>
+  <div class="type-strip">
+    {% for name, count in summary.by_type.items %}<span class="type-pill"><strong>{{ name }}</strong> {{ count }}</span>{% endfor %}
+  </div>
+</section>
+
+<div class="two-col">
+  <section class="section">
+    <div class="section-head"><h2>Time range</h2><span class="muted">ISO strings from the source</span></div>
+    <dl class="facts panel">
+      <dt>First observation</dt><dd class="mono">{{ summary.first_obs_time|default:"—" }}</dd>
+      <dt>Last observation</dt><dd class="mono">{{ summary.last_obs_time|default:"—" }}</dd>
+      <dt>First fetch</dt><dd class="mono">{{ summary.first_fetched_at|default:"—" }}</dd>
+      <dt>Last fetch</dt><dd class="mono">{{ summary.last_fetched_at|default:"—" }}</dd>
+    </dl>
+  </section>
+  <section class="section">
+    <div class="section-head"><h2>Source</h2><a href="{% url 'core:system' %}">System</a></div>
+    <dl class="facts panel">
+      <dt>Path</dt><dd class="mono small wrap">{{ source.path }}</dd>
+      <dt>Size</dt><dd>{{ source.size|human_bytes }}</dd>
+      <dt>Modified</dt><dd class="mono small">{{ source.mtime|slice:19 }}</dd>
+      <dt>Schema</dt><dd><span class="badge state-{{ profile.state }}">{{ profile.state }}</span></dd>
+      <dt>Migrations</dt><dd>{{ profile.schema_migrations|join:", "|default:"none" }}</dd>
+      <dt>Runs shape</dt><dd>{{ profile.runs_shape|default:"unknown" }}</dd>
+      <dt>Trainable predicate</dt><dd>{{ profile.trainable_predicate }}</dd>
+    </dl>
+  </section>
+</div>
+
+<section class="section">
+  <div class="section-head"><h2>Trainable set</h2><span class="muted">both candidate predicates are shown; the dashboard chooses neither</span></div>
+  <div class="table-wrap">
+    <table>
+      <caption class="sr-only">Trainable predicate variants</caption>
+      <thead><tr><th scope="col">Variant</th><th scope="col">Count</th><th scope="col">Predicate</th><th scope="col">Meaning</th></tr></thead>
+      <tbody>
+        {% for variant in variants %}
+        <tr>
+          <td>{{ variant.label }}</td>
+          <td class="num">{{ variant.count }}</td>
+          <td><code class="inline-code">{{ variant.predicate }}</code></td>
+          <td class="muted">{{ variant.description }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="two-col">
+  <section class="section">
+    <div class="section-head"><h2>Quality</h2><span class="muted">NULL counts per column</span></div>
+    {% if quality %}
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Column null counts</caption>
+        <thead><tr><th scope="col">Field</th><th scope="col">Null / blank</th><th scope="col">Share</th></tr></thead>
+        <tbody>
+          {% for field, count in quality.nulls.items %}
+          <tr><td class="mono">{{ field }}</td><td class="num">{{ count }}</td><td class="num">{{ count|percent_of:quality.total }}</td></tr>
+          {% endfor %}
+          <tr><td class="mono">raw_text (blank)</td><td class="num">{{ quality.blank_text }}</td><td class="num">{{ quality.blank_text|percent_of:quality.total }}</td></tr>
+          <tr><td class="mono">distinct aircraft</td><td class="num">{{ quality.distinct_aircraft }}</td><td class="num">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      {% include "partials/empty_state.html" with title="No quality data" message="The reports table could not be profiled." %}
+    {% endif %}
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2>Legacy vs target</h2><span class="muted">exact column diff</span></div>
+    {% if diff %}
+    <dl class="facts panel">
+      <dt>reports missing</dt><dd class="mono small">{{ diff.reports_missing|join:", "|default:"none" }}</dd>
+      <dt>reports extra</dt><dd class="mono small">{{ diff.reports_extra|join:", "|default:"none" }}</dd>
+      <dt>runs missing</dt><dd class="mono small">{{ diff.runs_missing|join:", "|default:"none" }}</dd>
+      <dt>runs extra</dt><dd class="mono small">{{ diff.runs_extra|join:", "|default:"none" }}</dd>
+      <dt>tables missing</dt><dd class="mono small">{{ diff.tables_missing|join:", "|default:"none" }}</dd>
+    </dl>
+    <p class="issue-links"><a href="{% url 'core:issues' %}#iss-002">ISS-002</a> <a href="{% url 'core:issues' %}#iss-011">ISS-011</a> <a href="{% url 'core:issues' %}#iss-013">ISS-013</a></p>
+    {% else %}
+      {% include "partials/empty_state.html" with title="No schema profile" message="The database could not be inspected." %}
+    {% endif %}
+  </section>
+</div>
+
+{% if profile.views %}
+<section class="section">
+  <div class="section-head"><h2>View definitions</h2><span class="muted">from sqlite_master</span></div>
+  {% for name, sql in profile.views.items %}
+    <details class="json-viewer"><summary class="mono">{{ name }}</summary>{% include "partials/sql_block.html" with sql=sql %}</details>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section class="section">
+  <div class="section-head"><h2>Recent reports</h2><a href="{% url 'pipeline:reports' %}">Filter the full table →</a></div>
+  {% if recent %}
+    {% include "pipeline/_reports_table.html" with rows=recent %}
+  {% else %}
+    {% include "partials/empty_state.html" with title="No reports" message="The reports table is empty." hint="The dashboard does not collect data." %}
+  {% endif %}
+</section>
+
+<div class="two-col">
+  <section class="section">
+    <div class="section-head"><h2>Collection runs</h2><a href="{% url 'pipeline:logs' %}">Logs / Jobs</a></div>
+    {% if runs %}
+      <div class="table-wrap">
+        <table>
+          <caption class="sr-only">Collection runs</caption>
+          <thead><tr><th scope="col">ID</th><th scope="col">Started</th><th scope="col">Status</th><th scope="col">Seen</th><th scope="col">Inserted</th></tr></thead>
+          <tbody>
+            {% for run in runs %}
+            <tr><td class="num">{{ run.id }}</td><td class="mono small">{{ run.started_at|slice:19|default:"—" }}</td><td><span class="badge {% if run.status == 'ok' %}state-ok{% else %}state-warning{% endif %}">{{ run.status }}</span></td><td class="num">{{ run.rows_seen|default:"—" }}</td><td class="num">{{ run.rows_inserted|default:"—" }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      {% include "partials/empty_state.html" with title="No run history" message="The runs table is missing or empty." %}
+    {% endif %}
+  </section>
+  <section class="section">
+    <div class="section-head"><h2>Rejected rows</h2><span class="muted">target schema only</span></div>
+    {% if rejected %}
+      <div class="table-wrap">
+        <table>
+          <caption class="sr-only">Rejected rows</caption>
+          <thead><tr><th scope="col">When</th><th scope="col">Reason</th><th scope="col">Detail</th></tr></thead>
+          <tbody>
+            {% for row in rejected %}<tr><td class="mono small">{{ row.fetched_at|slice:19 }}</td><td>{{ row.reason }}</td><td class="truncate">{{ row.detail|default:"—" }}</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      {% include "partials/empty_state.html" with title="No rejected table" message="The legacy database has no rejected table." hint="This is expected until the target schema is adopted." %}
+    {% endif %}
+  </section>
+</div>
+
+{% endif %}
+{% endblock %}

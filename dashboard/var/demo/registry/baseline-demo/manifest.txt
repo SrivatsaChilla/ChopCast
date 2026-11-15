@@ -1,0 +1,4 @@
+model_version=demo-baseline
+model_kind=transformer
+feature_version=features_v1
+labeling_version=v1

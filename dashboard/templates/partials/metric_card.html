@@ -1,0 +1,7 @@
+<div class="metric{% if tone %} tone-{{ tone }}{% endif %}{% if href %} is-link{% endif %}">
+  {% if href %}<a href="{{ href }}">{% endif %}
+  <span class="metric-label">{{ label }}</span>
+  <span class="metric-value">{{ value }}</span>
+  {% if sublabel %}<span class="metric-sub">{{ sublabel }}</span>{% endif %}
+  {% if href %}</a>{% endif %}
+</div>

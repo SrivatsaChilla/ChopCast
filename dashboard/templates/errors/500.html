@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section">
+  <div class="error-state">
+    <h2>Something went wrong in the dashboard</h2>
+    <p>The product code is fine: this was an unexpected dashboard error while reading a source. No pipeline file was modified.</p>
+    <p>Check the console log, then open the <a href="{% url 'core:system' %}">System</a> page and copy diagnostics. Known problems are listed in the <a href="{% url 'core:issues' %}">issue register</a>.</p>
+    <p><a class="button" href="{% url 'core:overview' %}">Back to overview</a></p>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,8 @@
+<div class="empty-state">
+  <span class="empty-icon" aria-hidden="true">○</span>
+  <h3>{{ title }}</h3>
+  {% if message %}<p>{{ message }}</p>{% endif %}
+  {% if hint %}<p class="muted">{{ hint }}</p>{% endif %}
+  {% if issues %}<p class="issue-links">{% for issue in issues %}<a href="{% url 'core:issues' %}#{{ issue|lower }}">{{ issue }}</a>{% endfor %}</p>{% endif %}
+  {% if url %}<p><a class="button" href="{{ url }}">{{ label|default:"Open" }}</a></p>{% endif %}
+</div>

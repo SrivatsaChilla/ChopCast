@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% load dashboard_tags %}
+{% block content %}
+
+{% if not snapshot %}
+  {% include "partials/error_state.html" with title="System snapshot unavailable" message=adapter_error path="" %}
+{% else %}
+
+<section class="section">
+  <div class="section-head">
+    <h2>Environment</h2>
+    <span class="muted">no pipeline code was imported</span>
+  </div>
+  <div class="two-col tight">
+    <dl class="facts panel">
+      <dt>Python</dt><dd class="mono">{{ snapshot.python_version }}</dd>
+      <dt>Executable</dt><dd class="mono small">{{ snapshot.python_executable }}</dd>
+      <dt>Django</dt><dd class="mono">{{ snapshot.django_version }}</dd>
+      <dt>Platform</dt><dd>{{ snapshot.platform }}</dd>
+      <dt>Working directory</dt><dd class="mono small">{{ snapshot.cwd }}</dd>
+      <dt>Timezone</dt><dd>{{ snapshot.timezone }}</dd>
+    </dl>
+    <div class="panel">
+      <div class="section-head compact">
+        <h3>Sanity checks</h3>
+        <span class="muted">{{ snapshot.checks|length }} checks</span>
+      </div>
+      <ul class="check-list">
+        {% for check in snapshot.checks %}
+        <li>
+          <span class="badge {{ check.state|check_class }}">{{ check.state }}</span>
+          <span class="check-title">{{ check.title }}</span>
+          <span class="check-detail">{{ check.detail }}</span>
+          {% if check.issues %}<span class="issue-links">{% for issue in check.issues %}<a href="{% url 'core:issues' %}#{{ issue|lower }}">{{ issue }}</a>{% endfor %}</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <h2>Adapter settings</h2>
+    <span class="muted">environment variables and defaults</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <caption class="sr-only">Adapter environment settings</caption>
+      <thead><tr><th scope="col">Variable</th><th scope="col">Source</th><th scope="col">Value</th></tr></thead>
+      <tbody>
+        {% for key, entry in snapshot.settings.items %}
+        <tr>
+          <td class="mono small">{{ key }}</td>
+          <td><span class="badge {% if entry.source == 'env' %}state-info{% else %}state-empty{% endif %}">{{ entry.source }}</span></td>
+          <td class="mono small wrap">{{ entry.value|display }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <h2>Paths</h2>
+    <span class="muted">existence is checked read-only</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <caption class="sr-only">Configured paths</caption>
+      <thead><tr><th scope="col">Key</th><th scope="col">Path</th><th scope="col">Type</th><th scope="col">Size</th><th scope="col">Modified</th><th scope="col">Readable</th></tr></thead>
+      <tbody>
+        {% for path in snapshot.paths %}
+        <tr>
+          <td class="mono small">{{ path.key }}</td>
+          <td class="mono small wrap">{{ path.path }}</td>
+          <td>{% if path.exists %}{% if path.is_dir %}directory{% else %}file{% endif %}{% else %}<span class="badge state-missing">missing</span>{% endif %}</td>
+          <td class="num">{{ path.size|human_bytes }}</td>
+          <td class="mono small">{{ path.mtime|slice:19|default:"—" }}</td>
+          <td>{% if path.readable %}<span class="ok-text">yes</span>{% else %}<span class="error-text">no</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <h2>Configuration files</h2>
+    <span class="muted">raw and resolved views · the core .env is not read</span>
+  </div>
+  {% if snapshot.configs %}
+    {% for cfg in snapshot.configs %}
+    <div class="panel config-panel">
+      <div class="section-head compact">
+        <h3>{{ cfg.name }}</h3>
+        <span class="mono small muted">{{ cfg.mtime|slice:19 }}</span>
+      </div>
+      {% if cfg.error %}<div class="banner error"><strong>Parse error:</strong> {{ cfg.error }}</div>{% endif %}
+      <div class="two-col tight">
+        {% if cfg.raw is not None %}{% include "partials/json_viewer.html" with title="Raw YAML" value=cfg.raw %}{% endif %}
+        {% if cfg.resolved is not None %}{% include "partials/json_viewer.html" with title="Resolved values" note=cfg.resolved|get_item:"__profile_overlay__" value=cfg.resolved %}{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    {% include "partials/empty_state.html" with title="No YAML configuration found" message="The configured configs directory is missing or contains no .yaml files." hint="Set CHOPCAST_DASHBOARD_CONFIG_DIR if the configs live elsewhere." %}
+  {% endif %}
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <h2>Packages</h2>
+    <span class="muted">versions from importlib.metadata; chopcast is not imported</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <caption class="sr-only">Installed package versions</caption>
+      <thead><tr><th scope="col">Package</th><th scope="col">Version</th><th scope="col">Expected by dashboard</th></tr></thead>
+      <tbody>
+        {% for package in snapshot.packages %}
+        <tr>
+          <td class="mono">{{ package.name }}</td>
+          <td>{% if package.version %}{{ package.version }}{% else %}<span class="badge state-missing">not installed</span>{% endif %}</td>
+          <td>{% if package.required %}yes{% else %}optional{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <h2>Copy diagnostics</h2>
+    <button type="button" class="button" data-copy="diagnostics-text">Copy to clipboard</button>
+  </div>
+  <p class="muted">Relative paths only; no report text or secrets.</p>
+  <pre class="code diagnostics" id="diagnostics-text">{{ diagnostics }}</pre>
+</section>
+
+{% endif %}
+{% endblock %}

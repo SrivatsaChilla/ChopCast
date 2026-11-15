@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% load dashboard_tags %}
+{% block content %}
+
+{% if document %}
+<section class="section">
+  <div class="section-head">
+    <h2>Summary</h2>
+    <span class="muted">{{ document.counts.total }} open items · {{ document.source_path }}</span>
+  </div>
+  <div class="metric-grid compact">
+    {% for severity, count in document.counts.by_severity.items %}
+      {% include "partials/metric_card.html" with label=severity value=count sublabel="open" %}
+    {% endfor %}
+    {% include "partials/metric_card.html" with label="Total" value=document.counts.total sublabel="registered issues" %}
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <h2>Filters</h2>
+    <span class="muted">client-side only · no server round trip</span>
+  </div>
+  <form class="filter-bar" id="issue-filters" onsubmit="return false">
+    <label>Severity
+      <select id="issue-severity"><option value="">all</option></select>
+    </label>
+    <label>Category
+      <select id="issue-category"><option value="">all</option></select>
+    </label>
+    <label>Status
+      <select id="issue-status"><option value="">all</option></select>
+    </label>
+    <label class="grow">Search
+      <input type="search" id="issue-search" placeholder="title, text, or ISS id">
+    </label>
+    <button type="button" class="button ghost" id="issue-reset">Reset</button>
+    <span class="filter-note" id="issue-count"></span>
+  </form>
+</section>
+
+<div class="docs-layout">
+  <nav class="toc" aria-label="Issue table of contents">
+    <p class="nav-group">Contents</p>
+    {% for anchor, label, level in document.toc %}
+      <a class="toc-link toc-level-{{ level }}" href="#{{ anchor }}">{{ label }}</a>
+    {% endfor %}
+  </nav>
+  <article class="markdown" id="issues-root">
+    {{ document.html|safe }}
+  </article>
+</div>
+{% else %}
+  {% include "partials/error_state.html" with title="Issue register not found" message="docs/ISSUES.md could not be read." path=issues_path %}
+  <p><a class="button" href="{% url 'core:issues_raw' %}">Try the raw download</a></p>
+{% endif %}
+
+{% endblock %}
+{% block extra_scripts %}<script src="/static/js/issues.js" defer></script>{% endblock %}

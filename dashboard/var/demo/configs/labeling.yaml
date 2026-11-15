@@ -1,0 +1,46 @@
+# Label-mapping rules. The labeler loads these at startup.
+# A change here is a content-breaking change that requires a new feature store version.
+# See docs/CONFIGURATION.md §4.1 and docs/ML_ARCHITECTURE.md §4.
+
+version: v1
+
+# Raw turbulence values that map to each severity class.
+# Matching is case-insensitive substring; longest match wins.
+none:
+  - "NEG"
+  - "TB NIL"
+  - "SMOOTH"
+  - "NIL"
+
+light:
+  - "LGT CHOP"
+  - "LGT"
+  - "LIGHT CHOP"
+  - "LIGHT"
+
+moderate:
+  - "OCNL MOD"
+  - "MOD CHOP"
+  - "LGT-MOD"
+  - "MOD"
+
+severe:
+  - "MOD-SEV"
+  - "SEV CHOP"
+  - "EXTRM"
+  - "SEVERE"
+  - "SEV"
+
+# When a raw value matches multiple classes, pick:
+#   "max"    - the higher severity (recommended)
+#   "min"    - the lower severity
+#   "first"  - the first match in document order
+combination_strategy: max
+
+# What to assign when a "CHOP" appears without a severity prefix.
+# Affects reports like "RM CHOP" where the pilot only describes chop.
+chop_only_label: light
+
+# What to assign to a raw value that matches no rule.
+# "none" (default) is conservative; "moderate" risks over-labeling.
+unknown_strategy: none

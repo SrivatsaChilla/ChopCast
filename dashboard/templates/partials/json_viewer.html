@@ -1,0 +1,4 @@
+{% load dashboard_tags %}<details class="json-viewer">
+  <summary>{{ title|default:"JSON" }}{% if note %} <span class="muted">— {{ note }}</span>{% endif %}</summary>
+  <pre class="code">{{ value|json_pretty }}</pre>
+</details>

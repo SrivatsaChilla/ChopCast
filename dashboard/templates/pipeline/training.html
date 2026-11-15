@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% load dashboard_tags %}
+{% block content %}
+
+<div class="banner-stack">
+  <div class="banner {% if artifact_status.state.value == 'ok' %}info{% else %}warning{% endif %}">Artifacts: {{ artifact_status.detail|default:"unknown" }}</div>
+  <div class="banner {% if feature_status.state.value == 'ok' %}info{% else %}warning{% endif %}">Features: {{ feature_status.detail|default:"unknown" }}</div>
+</div>
+
+<section class="section">
+  <div class="section-head">
+    <h2>Training runs</h2>
+    <span class="muted">inferred from registry rows, artifacts, and split files</span>
+  </div>
+  {% if runs %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <caption class="sr-only">Inferred training runs</caption>
+      <thead>
+        <tr>
+          <th scope="col">Model</th><th scope="col">Stored kind</th><th scope="col">Manifest kind</th>
+          <th scope="col">Feature</th><th scope="col">Registered</th><th scope="col">Source</th>
+          <th scope="col">Artifact</th><th scope="col">Accuracy</th><th scope="col">Macro F1</th>
+          <th scope="col">Warnings</th><th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in runs %}
+        <tr>
+          <td><strong>{{ run.model_version|default:run.key }}</strong>{% if run.model_id %}<span class="muted small"> #{{ run.model_id }}</span>{% endif %}</td>
+          <td>{{ run.model_kind_stored|default:"—" }}</td>
+          <td>{% if run.model_kind_manifest and run.model_kind_stored and run.model_kind_manifest != run.model_kind_stored %}<span class="badge state-warning">{{ run.model_kind_manifest }}</span>{% else %}{{ run.model_kind_manifest|default:"—" }}{% endif %}</td>
+          <td>{{ run.feature_version|default:"—" }}</td>
+          <td class="mono small">{{ run.registered_at|slice:19|default:"—" }}</td>
+          <td><span class="badge state-info">{{ run.source_path }}</span></td>
+          <td>{% if run.artifact_exists %}<span class="badge state-ok">present</span>{% else %}<span class="badge state-missing">missing</span>{% endif %}</td>
+          <td class="num">{{ run.metrics.accuracy|metric }}</td>
+          <td class="num">{{ run.metrics.macro_f1|metric }}</td>
+          <td>{% if run.warnings %}<span class="badge state-warning">{{ run.warnings|length }}</span>{% else %}<span class="badge state-ok">none</span>{% endif %}</td>
+          <td><a href="{% url 'pipeline:training_detail' run.key %}">Detail →</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    {% include "partials/empty_state.html" with title="No training runs found" message="No registry rows and no artifact directories with recognised files." hint="Training history is inferred; the pipeline has no run table." issues="ISS-085" %}
+  {% endif %}
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <h2>Split manifests</h2>
+    <span class="muted">runs/split-*.json</span>
+  </div>
+  {% if splits %}
+  <div class="table-wrap">
+    <table>
+      <caption class="sr-only">Split manifests</caption>
+      <thead><tr><th scope="col">File</th><th scope="col">Version</th><th scope="col">Seed</th><th scope="col">Mode</th><th scope="col">Train</th><th scope="col">Test</th><th scope="col">Modified</th></tr></thead>
+      <tbody>
+        {% for split in splits %}
+        <tr>
+          <td class="mono small">{{ split.name }}</td>
+          <td>{{ split.version|default:"—" }}</td>
+          <td class="num">{{ split.seed|default:"—" }}</td>
+          <td>{{ split.mode|default:"—" }}</td>
+          <td class="num">{{ split.train_count }}</td>
+          <td class="num">{{ split.test_count }}</td>
+          <td class="mono small">{{ split.mtime|slice:19|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    {% include "partials/empty_state.html" with title="No split manifests" message="No split-*.json files were found in the runs directory." issues="ISS-038" %}
+  {% endif %}
+</section>
+
+{% endblock %}

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% load dashboard_tags %}
+{% block content %}
+
+<section class="section">
+  <div class="section-head"><h2>Log files</h2><span class="muted">{{ files_status.detail|default:"configured roots" }}</span></div>
+  {% if files %}
+  <div class="table-wrap">
+    <table>
+      <caption class="sr-only">Log files</caption>
+      <thead><tr><th scope="col">File</th><th scope="col" class="num">Size</th><th scope="col">Modified</th><th scope="col">Root</th><th scope="col"></th></tr></thead>
+      <tbody>
+        {% for file, rel in display_files %}
+        <tr{% if rel == selected %} class="is-selected"{% endif %}>
+          <td class="mono">{{ file.name }}</td>
+          <td class="num">{{ file.size|human_bytes }}</td>
+          <td class="mono small">{{ file.mtime|slice:19 }}</td>
+          <td class="mono small wrap">{{ file.root }}</td>
+          <td><a href="?file={{ rel|urlencode }}">Tail →</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    {% include "partials/empty_state.html" with title="No logs found" message="logs/ is empty and no other configured root contains a log file." hint="Set CHOPCAST_DASHBOARD_LOGS_DIRS if logs live elsewhere." issues="ISS-086" %}
+  {% endif %}
+</section>
+
+{% if selected %}
+<section class="section">
+  <div class="section-head"><h2>Tail · {{ selected }}</h2><span class="muted">{{ tail_status.detail|default:"tail only" }}</span></div>
+  <form class="filter-bar" method="get">
+    <input type="hidden" name="file" value="{{ selected }}">
+    <label>Level
+      <select name="level">
+        <option value="">all</option>
+        {% for option in levels %}
+        <option value="{{ option }}"{% if level == option %} selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="grow">Search<input type="search" name="q" value="{{ query }}" placeholder="substring"></label>
+    <div class="filter-actions"><button class="button" type="submit">Filter</button><a class="button ghost" href="?file={{ selected|urlencode }}">Reset</a></div>
+  </form>
+  {% if tail %}
+  <div class="table-wrap max-h">
+    <table class="log-table">
+      <caption class="sr-only">Log tail</caption>
+      <thead><tr><th scope="col">#</th><th scope="col">Time</th><th scope="col">Level</th><th scope="col">Event</th><th scope="col">Fields</th><th scope="col">Line</th></tr></thead>
+      <tbody>
+        {% for entry in tail %}
+        <tr class="{% if not entry.is_json %}plain{% endif %}">
+          <td class="num muted">{{ entry.line_no }}</td>
+          <td class="mono small">{{ entry.timestamp|default:"—" }}</td>
+          <td>{% if entry.level %}<span class="badge {{ entry.level|level_class }}">{{ entry.level }}</span>{% endif %}</td>
+          <td class="mono small">{{ entry.event|default:"" }}</td>
+          <td class="mono small">{% for key, value in entry.fields.items %}<span class="kv">{{ key }}={{ value|display }}</span>{% endfor %}</td>
+          <td class="mono small wrap">{{ entry.raw|truncatechars:300 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    {% include "partials/empty_state.html" with title="No matching lines" message="The tail contains no lines for this level or search." %}
+  {% endif %}
+</section>
+{% endif %}
+
+<div class="two-col">
+  <section class="section">
+    <div class="section-head"><h2>Collection runs</h2><span class="muted">mapped legacy/target shape</span></div>
+    {% if runs %}
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Collection job history</caption>
+        <thead><tr><th scope="col">ID</th><th scope="col">Started</th><th scope="col">Status</th><th scope="col" class="num">Seen</th><th scope="col" class="num">Inserted</th><th scope="col" class="num">Skipped</th><th scope="col" class="num">Rejected</th></tr></thead>
+        <tbody>{% for run in runs %}<tr><td class="num">{{ run.id }}</td><td class="mono small">{{ run.started_at|slice:19|default:"—" }}</td><td><span class="badge {% if run.status == 'ok' %}state-ok{% else %}state-warning{% endif %}">{{ run.status }}</span></td><td class="num">{{ run.rows_seen|default:"—" }}</td><td class="num">{{ run.rows_inserted|default:"—" }}</td><td class="num">{{ run.rows_skipped|default:"—" }}</td><td class="num">{{ run.rows_rejected|default:"—" }}</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+    {% else %}
+      {% include "partials/empty_state.html" with title="No collection runs" message="The runs table is missing or empty." %}
+    {% endif %}
+  </section>
+  <section class="section">
+    <div class="section-head"><h2>Inferred training jobs</h2><span class="muted">no run table exists</span></div>
+    {% if training_runs %}
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Inferred training jobs</caption>
+        <thead><tr><th scope="col">Model</th><th scope="col">Registered</th><th scope="col">Source</th><th scope="col">Status</th></tr></thead>
+        <tbody>{% for run in training_runs %}<tr><td>{{ run.model_version|default:run.key }}</td><td class="mono small">{{ run.registered_at|slice:19|default:"—" }}</td><td><span class="badge state-info">{{ run.source_path }}</span></td><td>{% if run.artifact_exists %}<span class="badge state-ok">artifact present</span>{% else %}<span class="badge state-warning">artifact missing</span>{% endif %}</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+    {% else %}
+      {% include "partials/empty_state.html" with title="No inferred training jobs" message="No registry rows or artifacts were found." issues="ISS-085" %}
+    {% endif %}
+  </section>
+</div>
+
+<section class="section">
+  <div class="section-head"><h2>Rejected rows</h2><span class="muted">target schema only</span></div>
+  {% if rejected %}
+  <div class="table-wrap"><table><caption class="sr-only">Rejected rows</caption><thead><tr><th scope="col">When</th><th scope="col">Reason</th><th scope="col">Detail</th></tr></thead><tbody>{% for row in rejected %}<tr><td class="mono small">{{ row.fetched_at|slice:19 }}</td><td>{{ row.reason }}</td><td class="truncate">{{ row.detail|default:"—" }}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}
+    {% include "partials/empty_state.html" with title="No rejected rows" message="The rejected table is absent in the legacy database." %}
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% load dashboard_tags %}
+{% block content %}
+
+{% if not distribution %}
+  {% include "partials/error_state.html" with title="No label data" message=status.detail issues="ISS-003,ISS-009" %}
+{% else %}
+
+{% if distribution.warnings %}
+<section class="banner-stack">
+  {% for warning in distribution.warnings %}<div class="banner warning">{{ warning }}</div>{% endfor %}
+</section>
+{% endif %}
+
+<section class="section">
+  <div class="section-head">
+    <h2>Distributions</h2>
+    <span class="muted">{{ distribution.labelled }} labelled / {{ distribution.total }} total</span>
+  </div>
+  <div class="two-col tight">
+    <div class="panel">
+      <div class="section-head compact"><h3>Primary · turbulence</h3><span class="muted">DB column</span></div>
+      <div class="dist-list">
+        {% for item in distribution.primary %}
+        <div class="dist-row">
+          <span class="dist-label"><span class="badge {{ item.mapped|severity_class }}">{{ item.mapped }}</span> <span class="mono small">{{ item.value }}</span></span>
+          <span class="dist-bar"><span style="width: {{ item.count|percent_of:distribution.labelled }}"></span></span>
+          <span class="dist-count num">{{ item.count }}</span>
+        </div>
+        {% empty %}
+          {% include "partials/empty_state.html" with title="No primary labels" message="turbulence is NULL for every row." %}
+        {% endfor %}
+      </div>
+    </div>
+    <div class="panel">
+      <div class="section-head compact"><h3>Secondary · turbulence_2</h3><span class="muted">DB column</span></div>
+      <div class="dist-list">
+        {% for item in distribution.secondary %}
+        <div class="dist-row">
+          <span class="dist-label"><span class="badge {{ item.mapped|severity_class }}">{{ item.mapped }}</span> <span class="mono small">{{ item.value }}</span></span>
+          <span class="dist-bar"><span style="width: {{ item.count|percent_of:distribution.labelled }}"></span></span>
+          <span class="dist-count num">{{ item.count }}</span>
+        </div>
+        {% empty %}
+          {% include "partials/empty_state.html" with title="No secondary labels" message="turbulence_2 is NULL for every row." %}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <h2>Combined preview</h2>
+    <span class="muted">primary if present, otherwise secondary · derived</span>
+  </div>
+  <div class="two-col tight">
+    <div class="panel">
+      <canvas id="label-chart" height="180" aria-label="Label distribution chart" role="img"></canvas>
+      <noscript><p class="muted">Chart.js is disabled; the tables below contain the same values.</p></noscript>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Combined label counts</caption>
+        <thead><tr><th scope="col">Mapped label</th><th scope="col">Rows</th><th scope="col">Share</th></tr></thead>
+        <tbody>
+          {% for label, count in distribution.combined.items %}
+          <tr><td><span class="badge {{ label|severity_class }}">{{ label }}</span></td><td class="num">{{ count }}</td><td class="num">{{ count|percent_of:distribution.labelled }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <p class="issue-links">The canonical label layer is an open decision. This page shows each layer and chooses none. <a href="{% url 'core:issues' %}#iss-003">ISS-003</a></p>
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <h2>Rule preview</h2>
+    <span class="muted">applied in the dashboard, not the pipeline</span>
+  </div>
+  <div class="two-col tight">
+    <dl class="facts panel">
+      <dt>Rules file</dt><dd class="mono small wrap">{{ rules_path }}</dd>
+      <dt>Version</dt><dd>{{ rules.version|default:"not declared" }}</dd>
+      <dt>Combination</dt><dd>{{ rules.combination }}</dd>
+      <dt>CHOP only</dt><dd>{{ rules.chop_only }}</dd>
+      <dt>Unknown</dt><dd>{{ rules.unknown }}</dd>
+      {% if rules.error %}<dt>Error</dt><dd class="error-text">{{ rules.error }}</dd>{% endif %}
+    </dl>
+    <div class="panel">
+      <h3>Distinct raw values</h3>
+      <div class="table-wrap max-h">
+        <table>
+          <caption class="sr-only">Distinct raw turbulence values</caption>
+          <thead><tr><th scope="col">Value</th><th scope="col">Layer</th><th scope="col">Rows</th><th scope="col">Mapped</th><th scope="col">Matched rule</th></tr></thead>
+          <tbody>
+            {% for row in raw_rows %}
+            <tr>
+              <td class="mono">{{ row.value }}</td>
+              <td>{{ row.layer }}</td>
+              <td class="num">{{ row.n }}</td>
+              <td><span class="badge {{ row.mapped|severity_class }}">{{ row.mapped }}</span></td>
+              <td class="mono small">{{ row.rule }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="muted">No raw values are stored.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <h2>Trainable predicates</h2>
+    <span class="muted">counted side by side</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <caption class="sr-only">Trainable variants</caption>
+      <thead><tr><th scope="col">Variant</th><th scope="col">Count</th><th scope="col">Predicate</th><th scope="col">Meaning</th></tr></thead>
+      <tbody>
+        {% for variant in variants %}
+        <tr><td>{{ variant.label }}</td><td class="num">{{ variant.count }}</td><td><code class="inline-code">{{ variant.predicate }}</code></td><td class="muted">{{ variant.description }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if zero_support %}
+<section class="section">
+  <div class="section-head"><h2>Zero-support classes</h2><span class="muted">from persisted metrics</span></div>
+  <div class="banner warning">
+    These classes have zero test support, so their per-class scores are not meaningful:
+    <strong>{{ zero_support|join:", " }}</strong>. <a href="{% url 'core:issues' %}#iss-043">ISS-043</a>
+  </div>
+</section>
+{% endif %}
+
+{{ chart|json_script:"label-chart-data" }}
+{% endif %}
+{% endblock %}
+{% block extra_scripts %}
+<script src="/static/vendor/chartjs/4.4.7/chart.umd.js" defer></script>
+<script src="/static/js/labels.js" defer></script>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% load dashboard_tags %}{% if page_obj %}
+<nav class="pagination" aria-label="Pagination">
+  <span class="pagination-summary">Showing {{ page_obj.start }}–{{ page_obj.end }} of {{ page_obj.total }}{% if page_obj.pages > 1 %} · page {{ page_obj.page }} / {{ page_obj.pages }}{% endif %}</span>
+  <span class="pagination-links">
+    {% if page_obj.has_prev %}<a class="button ghost" href="{% query_replace page=1 %}">« First</a><a class="button ghost" href="{% query_replace page=page_obj.page|add:-1 %}">‹ Prev</a>{% endif %}
+    {% if page_obj.has_next %}<a class="button ghost" href="{% query_replace page=page_obj.page|add:1 %}">Next ›</a><a class="button ghost" href="{% query_replace page=page_obj.pages %}">Last »</a>{% endif %}
+    <span class="page-size">Size:
+      {% for size in page_sizes %}<a href="{% query_replace page_size=size page=1 %}"{% if size == page_obj.page_size %} class="is-active"{% endif %}>{{ size }}</a>{% endfor %}
+    </span>
+  </span>
+</nav>
+{% endif %}
